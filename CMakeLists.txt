@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 project(ftpd VERSION 3.2.1)
 
-set(FTPD_PATCH "-2")
+set(FTPD_PATCH "-3-fix")
 
 find_package(Patch REQUIRED)
 

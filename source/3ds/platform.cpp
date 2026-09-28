@@ -87,10 +87,7 @@ unsigned s_buttons = 0;
 /// \brief APT hook cookie
 aptHookCookie s_aptHookCookie;
 
-#ifdef CLASSIC
-/// \brief Host address
-in_addr_t s_addr = 0;
-#else
+#ifndef CLASSIC
 /// \brief Screen width
 constexpr auto SCREEN_WIDTH = 400.0f;
 /// \brief Screen height
@@ -182,6 +179,13 @@ bool getNetworkVisibility ()
 	// serialize ac:u access from multiple threads
 	auto const lock = std::scoped_lock (s_acuFence);
 
+	if (osGetWifiStrength () == 0)
+		return false;
+
+	u32 status = 0;
+	if (R_FAILED (ACU_GetStatus (&status)) || status != 3)
+		return false;
+
 	// get wifi status
 	static std::uint32_t lastWifi = 0;
 	static Result lastResult      = 0;
@@ -200,20 +204,7 @@ bool getNetworkVisibility ()
 	}
 
 	if (R_FAILED (result) || !wifi)
-	{
-#ifdef CLASSIC
-		s_addr = 0;
-#endif
 		return false;
-	}
-
-#ifdef CLASSIC
-	if (!s_addr)
-		s_addr = gethostid ();
-
-	if (s_addr == INADDR_BROADCAST)
-		s_addr = 0;
-#endif
 
 	return true;
 }
@@ -590,25 +581,16 @@ bool platform::init ()
 	return true;
 }
 
-bool platform::networkVisible ()
-{
-	// check if soc:u is active
-	if (!s_socuActive)
-		return false;
-
-	if (!getNetworkVisibility ())
-		return false;
-
-	auto const hostId = static_cast<in_addr_t> (gethostid ());
-	return hostId != 0 && hostId != INADDR_NONE && hostId != INADDR_BROADCAST;
-}
-
 bool platform::networkAddress (SockAddr &addr_)
 {
 	if (!s_socuActive)
 		return false;
 
-	auto const hostId = static_cast<in_addr_t> (gethostid ());
+	struct in_addr ip = {};
+	if (SOCU_GetIPInfo (&ip, nullptr, nullptr) != 0)
+		return false;
+
+	auto const hostId = ip.s_addr;
 	if (hostId == 0 || hostId == INADDR_NONE || hostId == INADDR_BROADCAST)
 		return false;
 
@@ -618,6 +600,19 @@ bool platform::networkAddress (SockAddr &addr_)
 
 	addr_ = addr;
 	return true;
+}
+
+bool platform::networkVisible ()
+{
+	// check if soc:u is active
+	if (!s_socuActive)
+		return false;
+
+	if (!getNetworkVisibility ())
+		return false;
+
+	SockAddr addr;
+	return networkAddress (addr);
 }
 
 std::string const &platform::hostname ()

@@ -954,6 +954,11 @@ void FtpServer::loop ()
 		if (platform::networkVisible ())
 			handleNetworkFound ();
 	}
+	else if (!platform::networkVisible ())
+	{
+		handleNetworkLost ();
+		return;
+	}
 
 #ifndef CLASSIC
 	{
