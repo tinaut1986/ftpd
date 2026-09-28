@@ -596,14 +596,25 @@ bool platform::networkVisible ()
 	if (!s_socuActive)
 		return false;
 
-	return getNetworkVisibility ();
+	if (!getNetworkVisibility ())
+		return false;
+
+	auto const hostId = static_cast<in_addr_t> (gethostid ());
+	return hostId != 0 && hostId != INADDR_NONE && hostId != INADDR_BROADCAST;
 }
 
 bool platform::networkAddress (SockAddr &addr_)
 {
-	sockaddr_in addr;
+	if (!s_socuActive)
+		return false;
+
+	auto const hostId = static_cast<in_addr_t> (gethostid ());
+	if (hostId == 0 || hostId == INADDR_NONE || hostId == INADDR_BROADCAST)
+		return false;
+
+	sockaddr_in addr     = {};
 	addr.sin_family      = AF_INET;
-	addr.sin_addr.s_addr = gethostid ();
+	addr.sin_addr.s_addr = hostId;
 
 	addr_ = addr;
 	return true;
