@@ -816,10 +816,14 @@ bool platform::loop ()
 
 	// check if the user wants to toggle the backlight
 	if (keys & HidNpadButton_Minus)
-	{
-		s_backlight = !s_backlight;
-		appletSetLcdBacklightOffEnabled (!s_backlight);
-	}
+		toggleBacklight ();
+}
+
+void platform::toggleBacklight ()
+{
+	s_backlight = !s_backlight;
+	appletSetLcdBacklightOffEnabled (!s_backlight);
+}
 
 #ifndef CLASSIC
 	auto const touchState = hidGetTouchScreenStates (&s_touchState, 1) ? &s_touchState : nullptr;

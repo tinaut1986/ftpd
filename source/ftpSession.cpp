@@ -448,25 +448,19 @@ void FtpSession::draw ()
 	std::fputs (m_workItem.empty () ? m_cwd.c_str () : m_workItem.c_str (), stdout);
 #else
 #ifdef __3DS__
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 45.0f), true);
+	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 56.0f), true);
 #else
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 80.0f), true);
+	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 64.0f), true);
 #endif
 
 	if (!m_workItem.empty ())
 		ImGui::TextUnformatted (m_workItem.c_str ());
 	else
-		ImGui::TextUnformatted (m_cwd.c_str ());
-
-	if (m_fileSize)
-		ImGui::Text (
-		    "%s/%s", fs::printSize (m_filePosition).c_str (), fs::printSize (m_fileSize).c_str ());
-	else if (m_filePosition)
-		ImGui::Text ("%s/???", fs::printSize (m_filePosition).c_str ());
+		ImGui::TextUnformatted (m_cwd.empty () ? "/" : m_cwd.c_str ());
 
 	if (m_fileSize || m_filePosition)
 	{
-		// MiB/s plot lines
+		// MiB/s plot lines & rate estimation
 		for (std::size_t i = 0; i < POSITION_HISTORY - 1; ++i)
 		{
 			m_filePositionDeltas[i]  = m_filePositionHistory[i + 1] - m_filePositionHistory[i];
@@ -490,15 +484,56 @@ void FtpSession::draw ()
 
 			auto const rate =
 			    gsl::narrow_cast<float> (diff) / std::chrono::duration<float> (timeDiff).count ();
-			auto const alpha = 0.01f;
+			auto const alpha = 0.05f;
 			m_xferRate       = alpha * rate + (1.0f - alpha) * m_xferRate;
 		}
 
 		auto const rateString = fs::printSize (m_xferRate) + "/s";
 
-		ImGui::SameLine ();
-		ImGui::PlotLines (
-		    "", m_filePositionDeltas, IM_ARRAYSIZE (m_filePositionDeltas), 0, rateString.c_str ());
+		if (m_fileSize > 0)
+		{
+			float const fraction = gsl::narrow_cast<float> (m_filePosition) / gsl::narrow_cast<float> (m_fileSize);
+			float const percent  = std::clamp (fraction * 100.0f, 0.0f, 100.0f);
+
+			// ETA calculation
+			char etaBuf[32] = "ETA: --:--";
+			if (m_xferRate > 512.0f && m_fileSize > m_filePosition)
+			{
+				auto const remainingBytes   = m_fileSize - m_filePosition;
+				auto const remainingSeconds = static_cast<unsigned int> (remainingBytes / m_xferRate);
+
+				if (remainingSeconds < 60)
+					std::snprintf (etaBuf, sizeof (etaBuf), "ETA: %us", remainingSeconds);
+				else if (remainingSeconds < 3600)
+					std::snprintf (etaBuf, sizeof (etaBuf), "ETA: %um %02us",
+					    remainingSeconds / 60, remainingSeconds % 60);
+				else
+					std::snprintf (etaBuf, sizeof (etaBuf), "ETA: %uh %02um",
+					    remainingSeconds / 3600, (remainingSeconds % 3600) / 60);
+			}
+
+			char progressOverlay[64];
+			std::snprintf (progressOverlay, sizeof (progressOverlay), "%s / %s (%.1f%%)",
+			    fs::printSize (m_filePosition).c_str (),
+			    fs::printSize (m_fileSize).c_str (),
+			    percent);
+
+			ImGui::ProgressBar (fraction, ImVec2 (-1.0f, 12.0f), progressOverlay);
+
+			ImGui::TextColored (ImVec4 (0.35f, 0.80f, 1.0f, 1.0f), "%s", rateString.c_str ());
+			ImGui::SameLine ();
+			ImGui::TextDisabled (" • ");
+			ImGui::SameLine ();
+			ImGui::TextColored (ImVec4 (0.95f, 0.85f, 0.35f, 1.0f), "%s", etaBuf);
+		}
+		else
+		{
+			ImGui::Text ("%s  •  %s", fs::printSize (m_filePosition).c_str (), rateString.c_str ());
+		}
+	}
+	else
+	{
+		ImGui::TextDisabled ("En espera...");
 	}
 
 	ImGui::EndChild ();

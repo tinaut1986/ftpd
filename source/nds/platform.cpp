@@ -132,12 +132,15 @@ bool platform::loop ()
 
 	// check if the user wants to toggle the backlight
 	if (kDown & KEY_SELECT)
-	{
-		s_backlight = !s_backlight;
-		(s_backlight ? powerOn : powerOff) (POWER_LCD);
-	}
+		toggleBacklight ();
 
 	return true;
+}
+
+void platform::toggleBacklight ()
+{
+	s_backlight = !s_backlight;
+	(s_backlight ? powerOn : powerOff) (POWER_LCD);
 }
 
 void platform::render ()

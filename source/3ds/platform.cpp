@@ -573,12 +573,48 @@ bool platform::init ()
 	// disable imgui.ini file
 	io.IniFilename = nullptr;
 
-	// citro3d logo doesn't quite show with the default transparency
-	style.Colors[ImGuiCol_WindowBg].w = 0.8f;
 	style.ScaleAllSizes (0.5f);
+
+	// Modern rounded corners
+	style.WindowRounding    = 5.0f;
+	style.ChildRounding     = 5.0f;
+	style.FrameRounding     = 4.0f;
+	style.PopupRounding     = 4.0f;
+	style.ScrollbarRounding = 4.0f;
+	style.GrabRounding      = 4.0f;
+	style.TabRounding       = 4.0f;
+
+	// Refined modern dark theme
+	style.Colors[ImGuiCol_WindowBg]             = ImVec4 (0.10f, 0.12f, 0.16f, 0.85f);
+	style.Colors[ImGuiCol_ChildBg]              = ImVec4 (0.13f, 0.16f, 0.22f, 0.70f);
+	style.Colors[ImGuiCol_PopupBg]              = ImVec4 (0.12f, 0.14f, 0.19f, 0.95f);
+	style.Colors[ImGuiCol_Border]               = ImVec4 (0.22f, 0.28f, 0.38f, 0.50f);
+	style.Colors[ImGuiCol_BorderShadow]         = ImVec4 (0.00f, 0.00f, 0.00f, 0.00f);
+	style.Colors[ImGuiCol_TitleBg]              = ImVec4 (0.12f, 0.15f, 0.20f, 1.00f);
+	style.Colors[ImGuiCol_TitleBgActive]        = ImVec4 (0.15f, 0.19f, 0.26f, 1.00f);
+	style.Colors[ImGuiCol_MenuBarBg]            = ImVec4 (0.11f, 0.14f, 0.19f, 1.00f);
+	style.Colors[ImGuiCol_Button]               = ImVec4 (0.18f, 0.26f, 0.38f, 0.80f);
+	style.Colors[ImGuiCol_ButtonHovered]        = ImVec4 (0.25f, 0.36f, 0.52f, 1.00f);
+	style.Colors[ImGuiCol_ButtonActive]         = ImVec4 (0.30f, 0.44f, 0.62f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogram]        = ImVec4 (0.18f, 0.68f, 0.90f, 1.00f);
+	style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4 (0.25f, 0.78f, 1.00f, 1.00f);
+	style.Colors[ImGuiCol_Header]               = ImVec4 (0.18f, 0.26f, 0.38f, 0.65f);
+	style.Colors[ImGuiCol_HeaderHovered]        = ImVec4 (0.24f, 0.35f, 0.50f, 0.80f);
+	style.Colors[ImGuiCol_HeaderActive]         = ImVec4 (0.28f, 0.40f, 0.58f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarBg]          = ImVec4 (0.08f, 0.10f, 0.13f, 0.40f);
+	style.Colors[ImGuiCol_ScrollbarGrab]        = ImVec4 (0.24f, 0.30f, 0.40f, 0.80f);
+	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4 (0.30f, 0.38f, 0.50f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4 (0.38f, 0.48f, 0.62f, 1.00f);
+	style.Colors[ImGuiCol_Separator]            = ImVec4 (0.20f, 0.25f, 0.34f, 0.50f);
 #endif
 
 	return true;
+}
+
+void platform::toggleBacklight ()
+{
+	s_backlight = !s_backlight;
+	enableBacklight (s_backlight);
 }
 
 bool platform::networkAddress (SockAddr &addr_)
@@ -651,8 +687,7 @@ bool platform::loop ()
 		if (s_buttons == KEY_SELECT)
 		{
 			// no other button was held at the same time as SELECT, so toggle
-			s_backlight = !s_backlight;
-			enableBacklight (s_backlight);
+			toggleBacklight ();
 		}
 	}
 	else

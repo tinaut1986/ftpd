@@ -319,9 +319,101 @@ void FtpServer::draw ()
 #ifdef __3DS__
 	// top screen
 	ImGui::SetNextWindowSize (ImVec2 (width, height * 0.5f));
+	{
+		std::array<char, 64> title{};
+		{
+			auto const serverLock = std::scoped_lock (m_lock);
+			std::snprintf (title.data (), title.size (), "ftpd###ftpd");
+		}
+
+		ImGui::Begin (title.data (),
+		    nullptr,
+		    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+	}
+
+	// Hero connection card on top screen
+	ImGui::BeginChild ("ConnCard", ImVec2 (0.0f, 38.0f), true);
+	{
+		auto const serverLock = std::scoped_lock (m_lock);
+		if (m_socket)
+		{
+			ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "● ONLINE ");
+			ImGui::SameLine ();
+			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
+
+			ImGui::TextDisabled ("%zu sesion%s activa%s  •  v3.2.1",
+			    m_sessions.size (),
+			    m_sessions.size () == 1 ? "" : "es",
+			    m_sessions.size () == 1 ? "" : "s");
+		}
+		else
+		{
+			ImGui::TextColored (ImVec4 (1.0f, 0.65f, 0.15f, 1.0f), "○ WAITING FOR WI-FI");
+			ImGui::SameLine ();
+			ImGui::TextDisabled ("•  Sin conexion");
+			ImGui::TextDisabled ("Activa el Wi-Fi en el menu HOME");
+		}
+	}
+	ImGui::EndChild ();
+
+	ImGui::BeginChild ("Logs", ImVec2 (0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
+	drawLog ();
+	ImGui::EndChild ();
+
+	ImGui::End ();
+
+	// bottom screen
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f), ImGuiCond_FirstUseEver);
+	ImGui::Begin ("Sessions",
+	    nullptr,
+	    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+	        ImGuiWindowFlags_MenuBar);
+
+	showMenu ();
+
+	{
+		auto const lock = std::scoped_lock (m_lock);
+		if (m_sessions.empty ())
+		{
+			ImGui::Spacing ();
+			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 120.0f), true);
+			{
+				ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  Servidor FTP");
+				ImGui::Separator ();
+				ImGui::Spacing ();
+				if (m_socket)
+				{
+					ImGui::Text ("  Listo para recibir conexiones");
+					ImGui::BulletText ("Servidor: %s", m_name.c_str ());
+					ImGui::BulletText ("Usuario: anonymous (o vacio)");
+					ImGui::Spacing ();
+					ImGui::TextDisabled ("  Las descargas y subidas activas apareceran aqui.");
+				}
+				else
+				{
+					ImGui::TextColored (ImVec4 (1.0f, 0.7f, 0.2f, 1.0f), "  Esperando conexion Wi-Fi...");
+					ImGui::TextDisabled ("  Enciende el Wi-Fi para iniciar el servidor.");
+				}
+			}
+			ImGui::EndChild ();
+
+			ImGui::Spacing ();
+			if (ImGui::Button ("  Apagar Pantallas (SELECT)  ", ImVec2 (-1.0f, 26.0f)))
+			{
+				platform::toggleBacklight ();
+			}
+		}
+		else
+		{
+			for (auto &session : m_sessions)
+				session->draw ();
+		}
+	}
+
+	ImGui::End ();
 #else
 	ImGui::SetNextWindowSize (ImVec2 (width, height));
-#endif
 	{
 		std::array<char, 64> title{};
 
@@ -335,41 +427,19 @@ void FtpServer::draw ()
 
 		ImGui::Begin (title.data (),
 		    nullptr,
-		    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize
-#ifndef __3DS__
-		        | ImGuiWindowFlags_MenuBar
-#endif
+		    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+		        ImGuiWindowFlags_MenuBar
 		);
 	}
 
-#ifndef __3DS__
 	showMenu ();
-#endif
 
-#ifndef __3DS__
 	ImGui::BeginChild (
 	    "Logs", ImVec2 (0, 0.5f * height), false, ImGuiWindowFlags_HorizontalScrollbar);
-#endif
 	drawLog ();
-#ifndef __3DS__
 	ImGui::EndChild ();
-#endif
 
-#ifdef __3DS__
-	ImGui::End ();
-
-	// bottom screen
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f), ImGuiCond_FirstUseEver);
-	ImGui::Begin ("Sessions",
-	    nullptr,
-	    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-	        ImGuiWindowFlags_MenuBar);
-
-	showMenu ();
-#else
 	ImGui::Separator ();
-#endif
 
 	{
 		auto const lock = std::scoped_lock (m_lock);
@@ -378,6 +448,7 @@ void FtpServer::draw ()
 	}
 
 	ImGui::End ();
+#endif
 #endif
 }
 

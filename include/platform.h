@@ -86,6 +86,11 @@ void render ();
 /// \brief Deinitialize platform
 void exit ();
 
+#if defined(__3DS__) || defined(__SWITCH__) || defined(__NDS__)
+/// \brief Toggle screen backlight
+void toggleBacklight ();
+#endif
+
 #ifdef __3DS__
 /// \brief Steady clock
 struct steady_clock
