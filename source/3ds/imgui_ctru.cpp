@@ -124,6 +124,7 @@ void updateTouch (ImGuiIO &io_)
 	static touchPosition s_touchPrev   = {};
 	static ImGuiWindow *s_scrollTarget = nullptr;
 	static float s_velocityY           = 0.0f;
+	static ImVec2 s_lastPos            = ImVec2 (0.0f, 0.0f);
 
 	if (kHeld & KEY_TOUCH)
 	{
@@ -133,11 +134,14 @@ void updateTouch (ImGuiIO &io_)
 		float const touchX = cur.px + 40.0f;
 		float const touchY = cur.py + 240.0f;
 
-		// Stop inertial coasting immediately on new touch
-		s_velocityY = 0.0f;
+		// hidTouchRead returns zeros once released, so remember the last valid position
+		s_lastPos = ImVec2 (touchX, touchY);
 
 		if (!s_touchActive)
 		{
+			// Stop inertial coasting immediately on new touch
+			s_velocityY = 0.0f;
+
 			// First frame of touch: initialize tracking
 			s_touchActive   = true;
 			s_dragScrolling = false;
@@ -198,8 +202,7 @@ void updateTouch (ImGuiIO &io_)
 				if (isWindowValid (s_scrollTarget) && s_scrollTarget->ScrollMax.y > 0.0f)
 				{
 					float const newScrollY = ImClamp (s_scrollTarget->Scroll.y - deltaY, 0.0f, s_scrollTarget->ScrollMax.y);
-					s_scrollTarget->Scroll.y = newScrollY;
-					s_scrollTarget->ScrollTarget.y = newScrollY;
+					ImGui::SetScrollY (s_scrollTarget, newScrollY);
 
 					// Smooth velocity tracking for inertia
 					s_velocityY = s_velocityY * 0.35f + deltaY * 0.65f;
@@ -234,10 +237,8 @@ void updateTouch (ImGuiIO &io_)
 		}
 		else
 		{
-			// Clean tap: fire click release at current touch position
-			touchPosition pos;
-			hidTouchRead (&pos);
-			io_.AddMousePosEvent (pos.px + 40.0f, pos.py + 240.0f);
+			// Clean tap (or scrollbar drag): release at the last valid touch position
+			io_.AddMousePosEvent (s_lastPos.x, s_lastPos.y);
 			io_.AddMouseButtonEvent (0, false);
 			s_velocityY    = 0.0f;
 			s_scrollTarget = nullptr;
@@ -252,8 +253,7 @@ void updateTouch (ImGuiIO &io_)
 		if (isWindowValid (s_scrollTarget) && std::fabs (s_velocityY) > 0.5f)
 		{
 			float const newScrollY = ImClamp (s_scrollTarget->Scroll.y - s_velocityY, 0.0f, s_scrollTarget->ScrollMax.y);
-			s_scrollTarget->Scroll.y = newScrollY;
-			s_scrollTarget->ScrollTarget.y = newScrollY;
+			ImGui::SetScrollY (s_scrollTarget, newScrollY);
 
 			s_velocityY *= 0.88f; // Smooth deceleration friction
 			if (std::fabs (s_velocityY) < 0.5f)
