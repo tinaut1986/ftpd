@@ -64,6 +64,7 @@ using statvfs_t = struct statvfs;
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -106,6 +107,17 @@ platform::Mutex s_lock;
 std::string s_freeSpace;
 
 #ifndef CLASSIC
+/// \brief Bullet point whose text wraps at the window edge instead of being clipped
+void bulletWrapped (char const *const fmt_, ...) IM_FMTARGS (1);
+void bulletWrapped (char const *const fmt_, ...)
+{
+	va_list args;
+	va_start (args, fmt_);
+	ImGui::Bullet ();
+	ImGui::TextWrappedV (fmt_, args);
+	va_end (args);
+}
+
 #ifndef NDEBUG
 std::string printable (std::string_view const data_)
 {
@@ -1063,15 +1075,15 @@ void FtpServer::showHelp ()
 			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS), nullptr, m_helpSelectedTab == 0 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
 				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, 0.0f), false);
-				ImGui::BulletText ("(Y): %s", tr (STR_HELP_CTRL_Y));
-				ImGui::BulletText ("(X): %s", tr (STR_HELP_CTRL_X));
-				ImGui::BulletText ("(B): %s", tr (STR_HELP_CTRL_B));
-				ImGui::BulletText ("(A): %s", tr (STR_HELP_CTRL_A));
-				ImGui::BulletText ("(D-Pad): %s", tr (STR_HELP_CTRL_DPAD));
-				ImGui::BulletText ("(L / R): %s", tr (STR_HELP_CTRL_LR));
-				ImGui::BulletText ("(SELECT): %s", tr (STR_HELP_CTRL_SELECT));
-				ImGui::BulletText ("(START): %s", tr (STR_HELP_CTRL_START));
-				ImGui::BulletText ("Touch: %s", tr (STR_HELP_CTRL_TOUCH));
+				bulletWrapped ("(Y): %s", tr (STR_HELP_CTRL_Y));
+				bulletWrapped ("(X): %s", tr (STR_HELP_CTRL_X));
+				bulletWrapped ("(B): %s", tr (STR_HELP_CTRL_B));
+				bulletWrapped ("(A): %s", tr (STR_HELP_CTRL_A));
+				bulletWrapped ("(D-Pad): %s", tr (STR_HELP_CTRL_DPAD));
+				bulletWrapped ("(L / R): %s", tr (STR_HELP_CTRL_LR));
+				bulletWrapped ("(SELECT): %s", tr (STR_HELP_CTRL_SELECT));
+				bulletWrapped ("(START): %s", tr (STR_HELP_CTRL_START));
+				bulletWrapped ("Touch: %s", tr (STR_HELP_CTRL_TOUCH));
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
@@ -1085,9 +1097,9 @@ void FtpServer::showHelp ()
 				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC3));
 				ImGui::Separator ();
-				ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_socket ? m_name.c_str () : tr (STR_NO_CONNECTION));
-				ImGui::BulletText ("%s %u", tr (STR_PORT), m_config->port ());
-				ImGui::BulletText ("%s %s", tr (STR_USER), m_config->user ().empty () ? "anonymous" : m_config->user ().c_str ());
+				bulletWrapped ("%s %s", tr (STR_HOST_LABEL), m_socket ? m_name.c_str () : tr (STR_NO_CONNECTION));
+				bulletWrapped ("%s %u", tr (STR_PORT), m_config->port ());
+				bulletWrapped ("%s %s", tr (STR_USER), m_config->user ().empty () ? "anonymous" : m_config->user ().c_str ());
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
@@ -1109,14 +1121,16 @@ void FtpServer::showHelp ()
 				ImGui::Separator ();
 				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
 				auto const &io = ImGui::GetIO ();
-				ImGui::BulletText ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
-				ImGui::BulletText ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
+				bulletWrapped ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
+				bulletWrapped ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
 
 #ifdef __3DS__
-				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
-				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
-				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
+				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
+				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
+				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
+				ImGui::PushTextWrapPos (0.0f);
 				ImGui::TextDisabled ("  (%s)", tr (STR_GPU_PROC_NOTE));
+				ImGui::PopTextWrapPos ();
 #endif
 				ImGui::Spacing ();
 

@@ -144,11 +144,15 @@ UniqueFtpConfig FtpConfig::load (gsl::not_null<gsl::czstring> const path_)
 
 		auto const key = strip (std::string_view (line).substr (0, pos));
 		auto const val = strip (std::string_view (line).substr (pos + 1));
-		if (key.empty () || val.empty ())
+		if (key.empty ())
 		{
 			error ("Ignoring '%s'\n", line.c_str ());
 			continue;
 		}
+
+		// empty value means unset (e.g. 'user=' for anonymous); keep the default silently
+		if (val.empty ())
+			continue;
 
 		if (key == "user")
 			config->m_user = val;
