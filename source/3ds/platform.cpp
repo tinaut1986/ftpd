@@ -574,9 +574,15 @@ bool platform::init ()
 	style.ChildRounding     = 5.0f;
 	style.FrameRounding     = 4.0f;
 	style.PopupRounding     = 4.0f;
-	style.ScrollbarRounding = 4.0f;
-	style.GrabRounding      = 4.0f;
+	style.ScrollbarRounding = 6.0f;
+	style.GrabRounding      = 5.0f;
 	style.TabRounding       = 4.0f;
+
+	// Permissive and comfortable touch controls:
+	// Override scaled-down scrollbar metrics so they are wide and easy to grab with stylus/finger
+	style.ScrollbarSize     = 18.0f;               // Wide scrollbar bar (increased from 7.0f)
+	style.GrabMinSize       = 24.0f;               // Tall grab handle (increased from 5.0f)
+	style.TouchExtraPadding = ImVec2 (4.0f, 4.0f); // Generous hitbox tolerance for touch interaction
 
 	// Refined modern dark theme
 	style.Colors[ImGuiCol_WindowBg]             = ImVec4 (0.10f, 0.12f, 0.16f, 0.85f);
@@ -595,10 +601,10 @@ bool platform::init ()
 	style.Colors[ImGuiCol_Header]               = ImVec4 (0.18f, 0.26f, 0.38f, 0.65f);
 	style.Colors[ImGuiCol_HeaderHovered]        = ImVec4 (0.24f, 0.35f, 0.50f, 0.80f);
 	style.Colors[ImGuiCol_HeaderActive]         = ImVec4 (0.28f, 0.40f, 0.58f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarBg]          = ImVec4 (0.08f, 0.10f, 0.13f, 0.40f);
-	style.Colors[ImGuiCol_ScrollbarGrab]        = ImVec4 (0.24f, 0.30f, 0.40f, 0.80f);
-	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4 (0.30f, 0.38f, 0.50f, 1.00f);
-	style.Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4 (0.38f, 0.48f, 0.62f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarBg]          = ImVec4 (0.07f, 0.09f, 0.13f, 0.60f);
+	style.Colors[ImGuiCol_ScrollbarGrab]        = ImVec4 (0.30f, 0.42f, 0.58f, 0.85f);
+	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4 (0.38f, 0.54f, 0.74f, 1.00f);
+	style.Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4 (0.45f, 0.65f, 0.90f, 1.00f);
 	style.Colors[ImGuiCol_Separator]            = ImVec4 (0.20f, 0.25f, 0.34f, 0.50f);
 	style.Colors[ImGuiCol_ModalWindowDimBg]     = ImVec4 (0.00f, 0.00f, 0.00f, 0.65f);
 #endif
