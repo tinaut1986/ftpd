@@ -3339,10 +3339,27 @@ void FtpSession::RNTO (char const *args_)
 	}
 
 	// rename the file
-	if (::rename (m_rename.c_str (), path.c_str ()) != 0)
+	auto rc = ::rename (m_rename.c_str (), path.c_str ());
+	if (rc != 0)
 	{
+		// FAT devoptabs (3DS sdmc) refuse to rename over an existing file, unlike POSIX.
+		// File managers replace files by uploading a temp name and renaming it over the
+		// original, so remove an existing regular file at the destination and retry.
+		stat_t src{};
+		stat_t dst{};
+		if (::stat (m_rename.c_str (), &src) == 0 && S_ISREG (src.st_mode) &&
+		    ::stat (path.c_str (), &dst) == 0 && S_ISREG (dst.st_mode) &&
+		    ::unlink (path.c_str ()) == 0)
+		{
+			rc = ::rename (m_rename.c_str (), path.c_str ());
+		}
+	}
+
+	if (rc != 0)
+	{
+		auto const err = errno;
 		m_rename.clear ();
-		sendResponse ("550 %s\r\n", std::strerror (errno));
+		sendResponse ("550 %s\r\n", std::strerror (err));
 		return;
 	}
 
