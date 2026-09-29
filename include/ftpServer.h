@@ -85,6 +85,9 @@ private:
 	/// \brief Show menu in the current window
 	void showMenu ();
 
+	/// \brief Draw the transfer cards (or the info card when nothing is transferring)
+	void drawSessionCards ();
+
 	/// \brief Show settings menu
 	void showSettings ();
 

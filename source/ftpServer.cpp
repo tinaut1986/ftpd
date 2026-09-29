@@ -31,6 +31,7 @@
 #include "platform.h"
 #include "sockAddr.h"
 #include "socket.h"
+#include "ui.h"
 
 #ifndef __NDS__
 #include "mdns.h"
@@ -329,23 +330,32 @@ void FtpServer::draw ()
 	auto const height = io.DisplaySize.y;
 
 	ImGui::SetNextWindowPos (ImVec2 (0, 0), ImGuiCond_FirstUseEver);
+#if defined(__3DS__) || defined(__SWITCH__)
 #ifdef __3DS__
-	auto const kDown = hidKeysDown ();
-	if (kDown & KEY_Y)
+	auto const kDown         = hidKeysDown ();
+	bool const pressSettings = kDown & KEY_Y;
+	bool const pressHelp     = kDown & KEY_X;
+	bool const pressBack     = kDown & KEY_B;
+#else
+	bool const pressSettings = ImGui::IsKeyPressed (ui::KEY_Y, false);
+	bool const pressHelp     = ImGui::IsKeyPressed (ImGuiKey_GamepadFaceUp, false);
+	bool const pressBack     = ImGui::IsKeyPressed (ImGuiKey_GamepadFaceRight, false);
+#endif
+	if (pressSettings)
 	{
 		if (m_showSettings)
 			closeModals ();
 		else
 			openSettings ();
 	}
-	if (kDown & KEY_X)
+	if (pressHelp)
 	{
 		if (m_showHelp)
 			closeModals ();
 		else
 			openHelp ();
 	}
-	if (kDown & KEY_B)
+	if (pressBack)
 	{
 		if (m_showSettings || m_showHelp)
 		{
@@ -353,6 +363,7 @@ void FtpServer::draw ()
 		}
 	}
 
+#ifdef __3DS__
 	// top screen
 	ImGui::SetNextWindowSize (ImVec2 (width, height * 0.5f));
 	{
@@ -394,10 +405,11 @@ void FtpServer::draw ()
 	ImGui::BeginChild ("Logs", ImVec2 (0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
 	drawLog ();
 
-	// Direct D-Pad and L/R scroll controls
-	auto const kHeld = hidKeysHeld ();
+	// Direct D-Pad (3DS only) and L/R scroll controls
 	if (!m_showSettings && !m_showHelp && !m_showAbout)
 	{
+#ifdef __3DS__
+		auto const kHeld = hidKeysHeld ();
 		if (kHeld & KEY_DUP)
 			ImGui::SetScrollY (ImGui::GetScrollY () - 15.0f);
 		if (kHeld & KEY_DDOWN)
@@ -406,6 +418,12 @@ void FtpServer::draw ()
 			ImGui::SetScrollY (ImGui::GetScrollY () - 60.0f);
 		if (kHeld & KEY_R)
 			ImGui::SetScrollY (ImGui::GetScrollY () + 60.0f);
+#else
+		if (ImGui::IsKeyDown (ImGuiKey_GamepadL1))
+			ImGui::SetScrollY (ImGui::GetScrollY () - ui::px (60.0f));
+		if (ImGui::IsKeyDown (ImGuiKey_GamepadR1))
+			ImGui::SetScrollY (ImGui::GetScrollY () + ui::px (60.0f));
+#endif
 	}
 	ImGui::EndChild ();
 
@@ -422,9 +440,9 @@ void FtpServer::draw ()
 	// Action buttons bar at the top of bottom screen
 	{
 		float const availW = ImGui::GetContentRegionAvail ().x;
-		float const btnW   = (availW - 16.0f) / 3.0f;
+		float const btnW   = (availW - ui::px (16.0f)) / 3.0f;
 
-		if (ImGui::Button (tr (STR_BTN_SETTINGS), ImVec2 (btnW, 24.0f)))
+		if (ui::badgeButton ("settings", tr (STR_BTN_SETTINGS), "Y", ImVec2 (btnW, ui::px (24.0f))))
 		{
 			if (m_showSettings)
 				closeModals ();
@@ -432,7 +450,7 @@ void FtpServer::draw ()
 				openSettings ();
 		}
 		ImGui::SameLine ();
-		if (ImGui::Button (tr (STR_BTN_HELP), ImVec2 (btnW, 24.0f)))
+		if (ui::badgeButton ("help", tr (STR_BTN_HELP), "X", ImVec2 (btnW, ui::px (24.0f))))
 		{
 			if (m_showHelp)
 				closeModals ();
@@ -440,7 +458,7 @@ void FtpServer::draw ()
 				openHelp ();
 		}
 		ImGui::SameLine ();
-		if (ImGui::Button (tr (STR_BTN_SCREENS), ImVec2 (btnW, 24.0f)))
+		if (ImGui::Button (tr (STR_BTN_SCREENS), ImVec2 (btnW, ui::px (24.0f))))
 		{
 			platform::toggleBacklight ();
 		}
@@ -450,72 +468,96 @@ void FtpServer::draw ()
 
 	showMenu ();
 
+	drawSessionCards ();
+
+	ImGui::End ();
+#else
+	// Switch: a single landscape window. Status line on top, log on the left, transfers on
+	// the right and touch-sized action buttons along the bottom edge (thumb reach when
+	// handheld). The system status icons and clock are drawn over the top edge.
+	ImGui::SetNextWindowPos (ImVec2 (0.0f, 0.0f));
+	ImGui::SetNextWindowSize (ImVec2 (width, height));
+	ImGui::Begin ("ftpd-EX###ftpd",
+	    nullptr,
+	    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+	        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoNavFocus);
+
+	// status header
 	{
-		auto const lock = std::scoped_lock (m_lock);
-		size_t activeXfers = 0;
-		for (auto &session : m_sessions)
+		auto const serverLock = std::scoped_lock (m_lock);
+		if (m_socket)
 		{
-			if (session->transferring ())
-				++activeXfers;
-		}
-
-		if (activeXfers > 0)
-		{
-			for (auto &session : m_sessions)
-			{
-				if (session->transferring ())
-					session->draw ();
-			}
-
-			if (activeXfers < m_sessions.size ())
-			{
-				auto const idleCount = m_sessions.size () - activeXfers;
-				ImGui::Spacing ();
-				ImGui::TextDisabled ("  + %zu %s %s",
-				    idleCount,
-				    idleCount == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL),
-				    tr (STR_IDLE));
-			}
+			ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_ONLINE));
+			ImGui::SameLine ();
+			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
+			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_STRING,
+			    m_sessions.size (),
+			    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
 		}
 		else
 		{
-			ImGui::Spacing ();
-			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 138.0f), true);
-			{
-				ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  ftpd-EX");
-				ImGui::Separator ();
-				ImGui::Spacing ();
-				if (m_socket)
-				{
-					ImGui::TextWrapped ("%s", tr (STR_CONNECT_INSTRUCTIONS));
-					ImGui::Spacing ();
-					ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_name.c_str ());
-					ImGui::BulletText ("%s", tr (STR_USER_LABEL));
-					ImGui::BulletText (tr (STR_STORAGE_FREE), getFreeSpace ().c_str ());
-					ImGui::Spacing ();
-					if (m_sessions.empty ())
-					{
-						ImGui::TextDisabled ("%s", tr (STR_ACTIVE_TRANSFERS_HINT));
-					}
-					else
-					{
-						ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f),
-						    tr (STR_SESSIONS_IDLE_HINT),
-						    m_sessions.size (),
-						    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
-					}
-				}
-				else
-				{
-					ImGui::TextColored (ImVec4 (1.0f, 0.7f, 0.2f, 1.0f), "  %s", tr (STR_WAITING_WIFI));
-					ImGui::TextDisabled ("  %s", tr (STR_TURN_ON_WIFI_HINT));
-				}
-			}
-			ImGui::EndChild ();
+			ImGui::TextColored (ImVec4 (1.0f, 0.65f, 0.15f, 1.0f), "%s", tr (STR_WAITING_WIFI));
+			ImGui::SameLine ();
+			ImGui::TextDisabled ("%s", tr (STR_NO_CONNECTION));
+			ImGui::TextDisabled ("%s", tr (STR_ENABLE_WIFI_HINT));
 		}
 	}
+	ImGui::Separator ();
+
+	// body between the header and the button bar
+	auto const &style   = ImGui::GetStyle ();
+	auto const footerH  = ImGui::GetFrameHeight () * 1.7f;
+	auto const bodyH    = ImGui::GetContentRegionAvail ().y - footerH - style.ItemSpacing.y;
+	auto const spacingX = style.ItemSpacing.x;
+	auto const leftW    = (ImGui::GetContentRegionAvail ().x - spacingX) * 0.55f;
+
+	ImGui::BeginChild ("LogPane", ImVec2 (leftW, bodyH), true, ImGuiWindowFlags_HorizontalScrollbar);
+	drawLog ();
+
+	// L/R scroll the log
+	if (!m_showSettings && !m_showHelp && !m_showAbout)
+	{
+		if (ImGui::IsKeyDown (ImGuiKey_GamepadL1))
+			ImGui::SetScrollY (ImGui::GetScrollY () - ui::px (60.0f));
+		if (ImGui::IsKeyDown (ImGuiKey_GamepadR1))
+			ImGui::SetScrollY (ImGui::GetScrollY () + ui::px (60.0f));
+	}
+	ImGui::EndChild ();
+
+	ImGui::SameLine ();
+
+	ImGui::BeginChild ("SessionsPane", ImVec2 (0.0f, bodyH), true);
+	drawSessionCards ();
+	ImGui::EndChild ();
+
+	// action buttons
+	{
+		float const btnW = (ImGui::GetContentRegionAvail ().x - 2.0f * spacingX) / 3.0f;
+
+		if (ui::badgeButton ("settings", tr (STR_BTN_SETTINGS), "Y", ImVec2 (btnW, footerH)))
+		{
+			if (m_showSettings)
+				closeModals ();
+			else
+				openSettings ();
+		}
+		ImGui::SameLine ();
+		if (ui::badgeButton ("help", tr (STR_BTN_HELP), "X", ImVec2 (btnW, footerH)))
+		{
+			if (m_showHelp)
+				closeModals ();
+			else
+				openHelp ();
+		}
+		ImGui::SameLine ();
+		if (ui::badgeButton ("screens", tr (STR_BTN_SCREENS), "-", ImVec2 (btnW, footerH)))
+			platform::toggleBacklight ();
+	}
+
+	showMenu ();
 
 	ImGui::End ();
+#endif
 #else
 	ImGui::SetNextWindowSize (ImVec2 (width, height));
 	{
@@ -683,6 +725,72 @@ void FtpServer::handleNetworkLost ()
 }
 
 #ifndef CLASSIC
+void FtpServer::drawSessionCards ()
+{
+	auto const lock = std::scoped_lock (m_lock);
+	size_t activeXfers = 0;
+	for (auto &session : m_sessions)
+	{
+		if (session->transferring ())
+			++activeXfers;
+	}
+
+	if (activeXfers > 0)
+	{
+		for (auto &session : m_sessions)
+		{
+			if (session->transferring ())
+				session->draw ();
+		}
+
+		if (activeXfers < m_sessions.size ())
+		{
+			auto const idleCount = m_sessions.size () - activeXfers;
+			ImGui::Spacing ();
+			ImGui::TextDisabled ("  + %zu %s %s",
+			    idleCount,
+			    idleCount == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL),
+			    tr (STR_IDLE));
+		}
+	}
+	else
+	{
+		ImGui::Spacing ();
+		ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, ui::px (138.0f)), true);
+		{
+			ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  ftpd-EX");
+			ImGui::Separator ();
+			ImGui::Spacing ();
+			if (m_socket)
+			{
+				ImGui::TextWrapped ("%s", tr (STR_CONNECT_INSTRUCTIONS));
+				ImGui::Spacing ();
+				ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_name.c_str ());
+				ImGui::BulletText ("%s", tr (STR_USER_LABEL));
+				ImGui::BulletText (tr (STR_STORAGE_FREE), getFreeSpace ().c_str ());
+				ImGui::Spacing ();
+				if (m_sessions.empty ())
+				{
+					ImGui::TextDisabled ("%s", tr (STR_ACTIVE_TRANSFERS_HINT));
+				}
+				else
+				{
+					ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f),
+					    tr (STR_SESSIONS_IDLE_HINT),
+					    m_sessions.size (),
+					    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
+				}
+			}
+			else
+			{
+				ImGui::TextColored (ImVec4 (1.0f, 0.7f, 0.2f, 1.0f), "  %s", tr (STR_WAITING_WIFI));
+				ImGui::TextDisabled ("  %s", tr (STR_TURN_ON_WIFI_HINT));
+			}
+		}
+		ImGui::EndChild ();
+	}
+}
+
 void FtpServer::openSettings ()
 {
 	m_openSettingsRequested = true;
@@ -720,7 +828,7 @@ void FtpServer::closeModals ()
 
 void FtpServer::showMenu ()
 {
-#ifndef __3DS__
+#if !defined(__3DS__) && !defined(__SWITCH__)
 	if (ImGui::BeginMenuBar ())
 	{
 #if defined(__SWITCH__)
@@ -855,14 +963,14 @@ void FtpServer::showSettings ()
 		// Top header with prominent red [X] close button
 		ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SETTINGS_TITLE));
 		ImGui::SameLine ();
-		float const closeBtnWidth = 26.0f;
-		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - 8.0f);
-		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - 2.0f);
+		float const closeBtnWidth = ui::px (26.0f);
+		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - ui::px (8.0f));
+		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - ui::px (2.0f));
 
 		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.75f, 0.20f, 0.20f, 0.85f));
 		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.90f, 0.28f, 0.28f, 1.00f));
 		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.95f, 0.35f, 0.35f, 1.00f));
-		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, 18.0f));
+		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, ui::px (18.0f)));
 		ImGui::PopStyleColor (3);
 
 		if (closeClicked)
@@ -878,7 +986,7 @@ void FtpServer::showSettings ()
 		ImGui::Spacing ();
 
 		// Scrollable form area (leaves 28px for bottom action buttons)
-		ImGui::BeginChild ("SettingsForm", ImVec2 (0.0f, -28.0f), false);
+		ImGui::BeginChild ("SettingsForm", ImVec2 (0.0f, -ui::px (28.0f)), false);
 
 		// Language selector
 		int currentLang = static_cast<int> (m_langSetting);
@@ -948,9 +1056,9 @@ void FtpServer::showSettings ()
 		auto const &style = ImGui::GetStyle ();
 		auto const btnWidth = (ImGui::GetContentRegionAvail ().x - style.ItemSpacing.x) * 0.5f;
 
-		auto const save  = ImGui::Button (tr (STR_BTN_SAVE), ImVec2 (btnWidth, 22.0f));
+		auto const save  = ImGui::Button (tr (STR_BTN_SAVE), ImVec2 (btnWidth, ui::px (22.0f)));
 		ImGui::SameLine ();
-		auto const reset = ImGui::Button (tr (STR_BTN_RESET), ImVec2 (btnWidth, 22.0f));
+		auto const reset = ImGui::Button (tr (STR_BTN_RESET), ImVec2 (btnWidth, ui::px (22.0f)));
 
 		if (save)
 		{
@@ -1049,14 +1157,14 @@ void FtpServer::showHelp ()
 		// Top header with prominent red [X] close button
 		ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_HELP_TITLE));
 		ImGui::SameLine ();
-		float const closeBtnWidth = 26.0f;
-		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - 8.0f);
-		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - 2.0f);
+		float const closeBtnWidth = ui::px (26.0f);
+		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - ui::px (8.0f));
+		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - ui::px (2.0f));
 
 		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.75f, 0.20f, 0.20f, 0.85f));
 		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.90f, 0.28f, 0.28f, 1.00f));
 		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.95f, 0.35f, 0.35f, 1.00f));
-		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, 18.0f));
+		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, ui::px (18.0f)));
 		ImGui::PopStyleColor (3);
 
 		if (closeClicked)
@@ -1075,15 +1183,22 @@ void FtpServer::showHelp ()
 			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS), nullptr, m_helpSelectedTab == 0 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
 				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, 0.0f), false);
-				bulletWrapped ("(Y): %s", tr (STR_HELP_CTRL_Y));
-				bulletWrapped ("(X): %s", tr (STR_HELP_CTRL_X));
-				bulletWrapped ("(B): %s", tr (STR_HELP_CTRL_B));
-				bulletWrapped ("(A): %s", tr (STR_HELP_CTRL_A));
-				bulletWrapped ("(D-Pad): %s", tr (STR_HELP_CTRL_DPAD));
-				bulletWrapped ("(L / R): %s", tr (STR_HELP_CTRL_LR));
-				bulletWrapped ("(SELECT): %s", tr (STR_HELP_CTRL_SELECT));
-				bulletWrapped ("(START): %s", tr (STR_HELP_CTRL_START));
-				bulletWrapped ("Touch: %s", tr (STR_HELP_CTRL_TOUCH));
+				ui::controlRow ({"Y"}, tr (STR_HELP_CTRL_Y));
+				ui::controlRow ({"X"}, tr (STR_HELP_CTRL_X));
+				ui::controlRow ({"B"}, tr (STR_HELP_CTRL_B));
+				ui::controlRow ({"A"}, tr (STR_HELP_CTRL_A));
+#ifdef __3DS__
+				ui::controlRow ({"D-PAD"}, tr (STR_HELP_CTRL_DPAD));
+#endif
+				ui::controlRow ({"L", "R"}, tr (STR_HELP_CTRL_LR));
+#ifdef __SWITCH__
+				ui::controlRow ({"-"}, tr (STR_HELP_CTRL_SELECT));
+				ui::controlRow ({"+"}, tr (STR_HELP_CTRL_START));
+#else
+				ui::controlRow ({"SELECT"}, tr (STR_HELP_CTRL_SELECT));
+				ui::controlRow ({"START"}, tr (STR_HELP_CTRL_START));
+#endif
+				ui::controlRow ({"TOUCH"}, tr (STR_HELP_CTRL_TOUCH));
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
@@ -1115,7 +1230,7 @@ void FtpServer::showHelp ()
 				ImGui::TextWrapped ("%s", tr (STR_ABOUT_CREDITS));
 				ImGui::Spacing ();
 
-				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (-1.0f, 22.0f)))
+				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (-1.0f, ui::px (22.0f))))
 					uploadLog ();
 				ImGui::Spacing ();
 

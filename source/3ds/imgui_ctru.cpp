@@ -36,6 +36,7 @@
 
 #include "fs.h"
 #include "platform.h"
+#include "ui.h"
 
 #include <algorithm>
 #include <chrono>
@@ -71,207 +72,38 @@ void setClipboardText (ImGuiContext *const context_, char const *const text_)
 	s_clipboard = text_;
 }
 
-/// \brief Helper to verify if an ImGuiWindow pointer is still valid in context
-static bool isWindowValid (ImGuiWindow const *window)
-{
-	if (!window)
-		return false;
-	ImGuiContext &g = *GImGui;
-	for (int i = 0; i < g.Windows.Size; ++i)
-	{
-		if (g.Windows[i] == window && window->Active && !window->Hidden)
-			return true;
-	}
-	return false;
-}
-
-/// \brief Helper to find the scrollable window or child under pos
-static ImGuiWindow *findScrollableWindowAt (ImVec2 const &pos)
-{
-	ImGuiContext &g = *GImGui;
-	ImGuiWindow *w = g.HoveredWindow;
-	if (!w)
-	{
-		for (int i = g.Windows.Size - 1; i >= 0; --i)
-		{
-			ImGuiWindow *candidate = g.Windows[i];
-			if (candidate->Active && !candidate->Hidden && candidate->Rect ().Contains (pos))
-			{
-				w = candidate;
-				break;
-			}
-		}
-	}
-	while (w)
-	{
-		if (w->ScrollMax.y > 0.0f && !(w->Flags & ImGuiWindowFlags_NoScrollWithMouse))
-			return w;
-		w = w->ParentWindow;
-	}
-	return nullptr;
-}
-
 /// \brief Update touch position and handle direct screen-drag scrolling
 /// \param io_ ImGui IO
 void updateTouch (ImGuiIO &io_)
 {
-	auto const kHeld = hidKeysHeld ();
-	auto const kUp   = hidKeysUp ();
+	static ui::TouchScroller s_scroller;
+	static bool s_wasTouching = false;
+	static ImVec2 s_lastPos   = ImVec2 (0.0f, 0.0f);
 
-	static bool s_touchActive          = false;
-	static bool s_dragScrolling        = false;
-	static touchPosition s_touchStart  = {};
-	static touchPosition s_touchPrev   = {};
-	static ImGuiWindow *s_scrollTarget = nullptr;
-	static float s_velocityY           = 0.0f;
-	static ImVec2 s_lastPos            = ImVec2 (0.0f, 0.0f);
-
-	if (kHeld & KEY_TOUCH)
+	if (hidKeysHeld () & KEY_TOUCH)
 	{
 		touchPosition cur;
 		hidTouchRead (&cur);
 
-		float const touchX = cur.px + 40.0f;
-		float const touchY = cur.py + 240.0f;
+		auto const raw = ImVec2 (cur.px + 40.0f, cur.py + 240.0f);
+		s_lastPos      = s_scroller.map (true, raw);
 
-		// hidTouchRead returns zeros once released, so remember the last valid position
-		s_lastPos = ImVec2 (touchX, touchY);
-
-		if (!s_touchActive)
-		{
-			// Stop inertial coasting immediately on new touch
-			s_velocityY = 0.0f;
-
-			// First frame of touch: initialize tracking
-			s_touchActive   = true;
-			s_dragScrolling = false;
-			s_touchStart    = cur;
-			s_touchPrev     = cur;
-			s_scrollTarget  = nullptr;
-
-			io_.AddMousePosEvent (touchX, touchY);
-			io_.AddMouseButtonEvent (0, true);
-		}
-		else
-		{
-			// Touch ongoing: check for drag threshold
-			float const dx    = static_cast<float> (cur.px - s_touchStart.px);
-			float const dy    = static_cast<float> (cur.py - s_touchStart.py);
-			float const absDx = std::fabs (dx);
-			float const absDy = std::fabs (dy);
-
-			ImGuiContext &g = *GImGui;
-
-			// Check if a scrollbar is actively held by the user
-			bool isScrollbarActive = false;
-			if (g.ActiveId != 0 && g.ActiveIdWindow)
-			{
-				if (g.ActiveId == ImGui::GetWindowScrollbarID (g.ActiveIdWindow, ImGuiAxis_Y) ||
-				    g.ActiveId == ImGui::GetWindowScrollbarID (g.ActiveIdWindow, ImGuiAxis_X))
-				{
-					isScrollbarActive = true;
-				}
-			}
-
-			// If moving mostly horizontally while an item is active (e.g. horizontal sliders),
-			// let the item process the horizontal drag instead of scrolling.
-			bool isHorizontalItemDrag = false;
-			if (g.ActiveId != 0 && !isScrollbarActive && absDx > absDy)
-			{
-				isHorizontalItemDrag = true;
-			}
-
-			// If vertical drag exceeds threshold (5 pixels) and not interacting with a scrollbar/slider:
-			if (!s_dragScrolling && !isScrollbarActive && !isHorizontalItemDrag && absDy > 5.0f && absDy > absDx)
-			{
-				s_dragScrolling = true;
-				s_scrollTarget  = findScrollableWindowAt (ImVec2 (touchX, touchY));
-
-				// Cancel active item press to prevent firing button click on release
-				ImGui::ClearActiveID ();
-				io_.AddMouseButtonEvent (0, false);
-			}
-
-			if (s_dragScrolling)
-			{
-				float const deltaY = static_cast<float> (cur.py - s_touchPrev.py);
-
-				if (!isWindowValid (s_scrollTarget))
-					s_scrollTarget = findScrollableWindowAt (ImVec2 (touchX, touchY));
-
-				if (isWindowValid (s_scrollTarget) && s_scrollTarget->ScrollMax.y > 0.0f)
-				{
-					float const newScrollY = ImClamp (s_scrollTarget->Scroll.y - deltaY, 0.0f, s_scrollTarget->ScrollMax.y);
-					ImGui::SetScrollY (s_scrollTarget, newScrollY);
-
-					// Smooth velocity tracking for inertia
-					s_velocityY = s_velocityY * 0.35f + deltaY * 0.65f;
-				}
-
-				io_.AddMousePosEvent (touchX, touchY);
-			}
-			else
-			{
-				// Regular pointer tracking / tap in progress
-				io_.AddMousePosEvent (touchX, touchY);
-				io_.AddMouseButtonEvent (0, true);
-			}
-
-			s_touchPrev = cur;
-		}
+		io_.AddMousePosEvent (s_lastPos.x, s_lastPos.y);
+		s_scroller.update (io_, true, raw);
+		s_wasTouching = true;
 	}
-	else if (kUp & KEY_TOUCH)
+	else if (s_wasTouching)
 	{
-		if (s_dragScrolling)
-		{
-			// Lifted after drag-scrolling: finalize with mouse button released and no active ID
-			io_.AddMouseButtonEvent (0, false);
-			ImGui::ClearActiveID ();
-
-			// If the user stopped/paused before lifting, zero out momentum
-			if (std::fabs (s_velocityY) < 1.0f)
-			{
-				s_velocityY    = 0.0f;
-				s_scrollTarget = nullptr;
-			}
-		}
-		else
-		{
-			// Clean tap (or scrollbar drag): release at the last valid touch position
-			io_.AddMousePosEvent (s_lastPos.x, s_lastPos.y);
-			io_.AddMouseButtonEvent (0, false);
-			s_velocityY    = 0.0f;
-			s_scrollTarget = nullptr;
-		}
-
-		s_touchActive   = false;
-		s_dragScrolling = false;
+		// hidTouchRead returns zeros once released, so release at the last valid position
+		io_.AddMousePosEvent (s_lastPos.x, s_lastPos.y);
+		s_scroller.update (io_, false, s_lastPos);
+		s_wasTouching = false;
 	}
 	else
 	{
-		// Inertial scrolling coasting after a flick
-		if (isWindowValid (s_scrollTarget) && std::fabs (s_velocityY) > 0.5f)
-		{
-			float const newScrollY = ImClamp (s_scrollTarget->Scroll.y - s_velocityY, 0.0f, s_scrollTarget->ScrollMax.y);
-			ImGui::SetScrollY (s_scrollTarget, newScrollY);
-
-			s_velocityY *= 0.88f; // Smooth deceleration friction
-			if (std::fabs (s_velocityY) < 0.5f)
-			{
-				s_velocityY    = 0.0f;
-				s_scrollTarget = nullptr;
-			}
-		}
-		else
-		{
-			s_velocityY    = 0.0f;
-			s_scrollTarget = nullptr;
-		}
-
-		io_.AddMouseButtonEvent (0, false);
+		// Not touched: coast, then move the cursor off-screen
+		s_scroller.update (io_, false, s_lastPos);
 		io_.AddMousePosEvent (-FLT_MAX, -FLT_MAX);
-		s_touchActive   = false;
-		s_dragScrolling = false;
 	}
 }
 

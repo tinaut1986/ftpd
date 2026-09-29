@@ -27,6 +27,7 @@
 #include "log.h"
 #include "mdns.h"
 #include "platform.h"
+#include "ui.h"
 
 #ifndef CLASSIC
 #include <imgui.h>
@@ -45,6 +46,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cinttypes>
+#include <cmath>
 #include <cstdarg>
 #include <cstring>
 #include <ctime>
@@ -457,12 +459,12 @@ static void drawTransferProgressBarWithGraph (
     float const *deltas,
     std::size_t deltaCount,
     char const *overlayText,
-    float height = 22.0f)
+    float height = 22.0f) // 3DS pixels; scaled below
 {
 	auto const &style  = ImGui::GetStyle ();
 	auto const pos     = ImGui::GetCursorScreenPos ();
 	float const availW = ImGui::GetContentRegionAvail ().x;
-	ImVec2 const size (availW, height);
+	ImVec2 const size (availW, ui::px (height));
 
 	// Reserve layout space in the window
 	ImGui::Dummy (size);
@@ -571,11 +573,7 @@ void FtpSession::draw ()
 
 	std::fputs (m_workItem.empty () ? m_cwd.c_str () : m_workItem.c_str (), stdout);
 #else
-#ifdef __3DS__
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 66.0f), true);
-#else
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 72.0f), true);
-#endif
+	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, ui::px (66.0f)), true);
 
 	if (!m_workItem.empty ())
 		ImGui::TextUnformatted (m_workItem.c_str ());

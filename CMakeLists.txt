@@ -137,7 +137,9 @@ if(NOT FTPD_CLASSIC AND NOT NINTENDO_DS)
 
 	target_sources(${FTPD_TARGET} PRIVATE
 		include/licenses.h
+		include/ui.h
 		source/licenses.cpp
+		source/ui.cpp
 
 		${IMGUI_SOURCE_DIR}/imconfig.h
 		${IMGUI_SOURCE_DIR}/imgui.h

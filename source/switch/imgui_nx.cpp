@@ -35,6 +35,7 @@
 
 #include "fs.h"
 #include "platform.h"
+#include "ui.h"
 
 #include <chrono>
 #include <cstring>
@@ -1424,20 +1425,21 @@ void updateMousePos (HidMouseState const &mouseState_, ImGuiIO &io_)
 /// \param io_ ImGui IO
 void updateTouch (HidTouchScreenState const &touchState_, ImGuiIO &io_)
 {
-	static HidTouchScreenState prevTouchState;
+	static ui::TouchScroller s_scroller;
 
-	if (prevTouchState.count > 0 && touchState_.count < 1)
-		io_.AddMouseButtonEvent (0, false);
-	else if (prevTouchState.count < 1 && touchState_.count > 0)
-		io_.AddMouseButtonEvent (0, true);
+	auto const touching = touchState_.count > 0;
+	auto const pos =
+	    touching ? ImVec2 (touchState_.touches[0].x, touchState_.touches[0].y) : ImVec2 (0.0f, 0.0f);
 
-	prevTouchState = touchState_;
+	// clicks and drag-scrolling
+	auto const mapped = s_scroller.map (touching, pos);
+	s_scroller.update (io_, touching, pos);
 
-	if (touchState_.count < 1)
+	if (!touching)
 		return;
 
 	// set mouse position to touch point; force hide mouse cursor
-	moveMouse (io_, ImVec2 (touchState_.touches[0].x, touchState_.touches[0].y));
+	moveMouse (io_, mapped);
 	s_showMouse = false;
 }
 
@@ -1451,7 +1453,7 @@ void updateGamepads (PadState const &padState_, ImGuiIO &io_)
 	    std::make_pair (HidNpadButton_A,     ImGuiKey_GamepadFaceDown),  // A and B are swapped
 	    std::make_pair (HidNpadButton_B,     ImGuiKey_GamepadFaceRight), // this is more intuitive
 	    std::make_pair (HidNpadButton_X,     ImGuiKey_GamepadFaceUp),
-	    std::make_pair (HidNpadButton_Y,     ImGuiKey_GamepadFaceLeft),
+	    std::make_pair (HidNpadButton_Y,     ui::KEY_Y), // see ui.h
 	    std::make_pair (HidNpadButton_L,     ImGuiKey_GamepadL1),
 	    std::make_pair (HidNpadButton_R,     ImGuiKey_GamepadR1),
 	    std::make_pair (HidNpadButton_Up,    ImGuiKey_GamepadDpadUp),
