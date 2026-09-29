@@ -81,8 +81,6 @@ platform::Mutex s_acuFence;
 
 /// \brief Whether to power backlight
 bool s_backlight = true;
-/// \brief Button state for toggling backlight
-unsigned s_buttons = 0;
 
 /// \brief APT hook cookie
 aptHookCookie s_aptHookCookie;
@@ -138,12 +136,7 @@ TickCounter s_timer;
 /// \param enable_ Whether to enable backligh
 void enableBacklight (bool const enable_)
 {
-	if (R_FAILED (gspLcdInit ()))
-		return;
-
 	(enable_ ? GSPLCD_PowerOnBacklight : GSPLCD_PowerOffBacklight) (GSPLCD_SCREEN_BOTH);
-
-	gspLcdExit ();
 }
 
 /// \brief Handle APT cookie
@@ -497,6 +490,7 @@ bool platform::init ()
 	acInit ();
 	ndmuInit ();
 	ptmuInit ();
+	gspLcdInit ();
 #ifndef CLASSIC
 	romfsInit ();
 #endif
@@ -668,33 +662,15 @@ bool platform::loop ()
 
 	auto const kDown = hidKeysDown ();
 	auto const kHeld = hidKeysHeld ();
-	auto const kUp   = hidKeysUp ();
 
 	// check if the user wants to exit
 	if (kDown & KEY_START)
 		return false;
 
 	// check if the user wants to toggle the backlight
-	// avoid toggling during the Rosalina menu default combo
-	if (kDown == KEY_SELECT && kHeld == KEY_SELECT)
-	{
-		// SELECT was pressed and no other keys are held, so reset state
-		s_buttons = KEY_SELECT;
-	}
-	else if (kUp & KEY_SELECT)
-	{
-		// SELECT was released
-		if (s_buttons == KEY_SELECT)
-		{
-			// no other button was held at the same time as SELECT, so toggle
-			toggleBacklight ();
-		}
-	}
-	else
-	{
-		// add any held buttons
-		s_buttons |= kHeld;
-	}
+	// avoid toggling during the Rosalina menu default combo (L + D-Pad Down + Select)
+	if ((kDown & KEY_SELECT) && !(kHeld & (KEY_L | KEY_DDOWN)))
+		toggleBacklight ();
 
 #ifndef CLASSIC
 	auto &io = ImGui::GetIO ();
@@ -781,6 +757,7 @@ void platform::exit ()
 	ptmuExit ();
 	ndmuExit ();
 	acExit ();
+	gspLcdExit ();
 }
 
 ///////////////////////////////////////////////////////////////////////////

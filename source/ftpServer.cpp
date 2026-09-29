@@ -321,21 +321,21 @@ void FtpServer::draw ()
 	auto const kDown = hidKeysDown ();
 	if (kDown & KEY_Y)
 	{
-		m_showSettings = !m_showSettings;
 		if (m_showSettings)
-			m_showHelp = m_showAbout = false;
+			closeModals ();
+		else
+			openSettings ();
 	}
 	if (kDown & KEY_X)
 	{
-		m_showHelp = !m_showHelp;
 		if (m_showHelp)
-			m_showSettings = m_showAbout = false;
+			closeModals ();
+		else
+			openHelp ();
 	}
 	if ((kDown & KEY_B) && (m_showSettings || m_showHelp || m_showAbout))
 	{
-		m_showSettings = false;
-		m_showHelp     = false;
-		m_showAbout    = false;
+		closeModals ();
 	}
 
 	// top screen
@@ -410,13 +410,25 @@ void FtpServer::draw ()
 		float const btnW   = (availW - 16.0f) / 3.0f;
 
 		if (ImGui::Button (tr (STR_BTN_SETTINGS), ImVec2 (btnW, 24.0f)))
-			m_showSettings = true;
+		{
+			if (m_showSettings)
+				closeModals ();
+			else
+				openSettings ();
+		}
 		ImGui::SameLine ();
 		if (ImGui::Button (tr (STR_BTN_HELP), ImVec2 (btnW, 24.0f)))
-			m_showHelp = true;
+		{
+			if (m_showHelp)
+				closeModals ();
+			else
+				openHelp ();
+		}
 		ImGui::SameLine ();
 		if (ImGui::Button (tr (STR_BTN_SCREENS), ImVec2 (btnW, 24.0f)))
+		{
 			platform::toggleBacklight ();
+		}
 	}
 
 	ImGui::Separator ();
@@ -625,12 +637,40 @@ void FtpServer::handleNetworkLost ()
 }
 
 #ifndef CLASSIC
+void FtpServer::openSettings ()
+{
+	m_openSettingsRequested = true;
+	m_openHelpRequested     = false;
+	m_openAboutRequested    = false;
+	m_closeModalsRequested  = false;
+}
+
+void FtpServer::openHelp ()
+{
+	m_openHelpRequested     = true;
+	m_openSettingsRequested = false;
+	m_openAboutRequested    = false;
+	m_closeModalsRequested  = false;
+}
+
+void FtpServer::openAbout ()
+{
+	m_openAboutRequested    = true;
+	m_openSettingsRequested = false;
+	m_openHelpRequested     = false;
+	m_closeModalsRequested  = false;
+}
+
+void FtpServer::closeModals ()
+{
+	m_closeModalsRequested  = true;
+	m_openSettingsRequested = false;
+	m_openHelpRequested     = false;
+	m_openAboutRequested    = false;
+}
+
 void FtpServer::showMenu ()
 {
-	auto const prevShowSettings = m_showSettings;
-	auto const prevShowHelp     = m_showHelp;
-	auto const prevShowAbout    = m_showAbout;
-
 #ifndef __3DS__
 	if (ImGui::BeginMenuBar ())
 	{
@@ -641,10 +681,10 @@ void FtpServer::showMenu ()
 #endif
 		{
 			if (ImGui::MenuItem (tr (STR_SETTINGS_TITLE)))
-				m_showSettings = true;
+				openSettings ();
 
 			if (ImGui::MenuItem (tr (STR_HELP_TITLE)))
-				m_showHelp = true;
+				openHelp ();
 
 			if (ImGui::MenuItem (tr (STR_UPLOAD_LOG)))
 				uploadLog ();
@@ -652,7 +692,7 @@ void FtpServer::showMenu ()
 			ImGui::Separator ();
 
 			if (ImGui::MenuItem (tr (STR_ABOUT)))
-				m_showAbout = true;
+				openAbout ();
 
 			ImGui::Separator ();
 
@@ -665,63 +705,85 @@ void FtpServer::showMenu ()
 	}
 #endif
 
-	if (m_showSettings)
+	if (m_closeModalsRequested)
 	{
-		if (!prevShowSettings)
-		{
+		m_closeModalsRequested = false;
+		m_showSettings         = false;
+		m_showHelp             = false;
+		m_showAbout            = false;
+		ImGui::CloseCurrentPopup ();
+	}
+
+	if (m_openSettingsRequested)
+	{
+		m_openSettingsRequested = false;
+		m_showSettings          = true;
+		m_showHelp              = false;
+		m_showAbout             = false;
+
 #ifndef __NDS__
-			auto const lock = m_config->lockGuard ();
+		auto const lock = m_config->lockGuard ();
 #endif
-			m_langSetting = m_config->language ();
+		m_langSetting = m_config->language ();
 
-			m_userSetting = m_config->user ();
-			m_userSetting.resize (32);
+		m_userSetting = m_config->user ();
+		m_userSetting.resize (32);
 
-			m_passSetting = m_config->pass ();
-			m_passSetting.resize (32);
+		m_passSetting = m_config->pass ();
+		m_passSetting.resize (32);
 
-			m_hostnameSetting = m_config->hostname ();
-			m_hostnameSetting.resize (32);
+		m_hostnameSetting = m_config->hostname ();
+		m_hostnameSetting.resize (32);
 
-			m_portSetting = m_config->port ();
+		m_portSetting = m_config->port ();
 
-			m_deflateLevelSetting = m_config->deflateLevel ();
+		m_deflateLevelSetting = m_config->deflateLevel ();
 
 #ifdef __3DS__
-			m_getMTimeSetting = m_config->getMTime ();
+		m_getMTimeSetting = m_config->getMTime ();
 #endif
 
 #ifdef __SWITCH__
-			m_enableAPSetting = m_config->enableAP ();
+		m_enableAPSetting = m_config->enableAP ();
 
-			m_ssidSetting = m_config->ssid ();
-			m_ssidSetting.resize (19);
+		m_ssidSetting = m_config->ssid ();
+		m_ssidSetting.resize (19);
 
-			m_passphraseSetting = m_config->passphrase ();
-			m_passphraseSetting.resize (63);
+		m_passphraseSetting = m_config->passphrase ();
+		m_passphraseSetting.resize (63);
 #endif
 
-			ImGui::OpenPopup ("Settings");
-		}
-
-		showSettings ();
+		ImGui::OpenPopup ("Settings");
 	}
+
+	if (m_openHelpRequested)
+	{
+		m_openHelpRequested = false;
+		m_showHelp          = true;
+		m_showSettings      = false;
+		m_showAbout         = false;
+
+		ImGui::OpenPopup ("Help");
+	}
+
+	if (m_openAboutRequested)
+	{
+		m_openAboutRequested = false;
+		m_showAbout          = true;
+		m_showSettings       = false;
+		m_showHelp           = false;
+
+		ImGui::OpenPopup ("About");
+	}
+
+	if (m_showSettings)
+		showSettings ();
 
 	if (m_showHelp)
-	{
-		if (!prevShowHelp)
-			ImGui::OpenPopup ("Help");
-
 		showHelp ();
-	}
 
 	if (m_showAbout)
-	{
-		if (!prevShowAbout)
-			ImGui::OpenPopup ("About");
-
 		showAbout ();
-	}
 }
 
 void FtpServer::showSettings ()
@@ -905,6 +967,10 @@ void FtpServer::showSettings ()
 
 		ImGui::EndPopup ();
 	}
+	else
+	{
+		m_showSettings = false;
+	}
 }
 
 void FtpServer::showHelp ()
@@ -973,7 +1039,7 @@ void FtpServer::showHelp ()
 				ImGui::SameLine ();
 				if (ImGui::Button (tr (STR_ABOUT)))
 				{
-					m_showAbout = true;
+					openAbout ();
 				}
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
@@ -989,6 +1055,10 @@ void FtpServer::showHelp ()
 		}
 
 		ImGui::EndPopup ();
+	}
+	else
+	{
+		m_showHelp = false;
 	}
 }
 
@@ -1115,6 +1185,10 @@ void FtpServer::showAbout ()
 #endif
 
 		ImGui::EndPopup ();
+	}
+	else
+	{
+		m_showAbout = false;
 	}
 }
 

@@ -94,6 +94,18 @@ private:
 	/// \brief Show about window
 	void showAbout ();
 
+	/// \brief Open settings modal
+	void openSettings ();
+
+	/// \brief Open help modal
+	void openHelp ();
+
+	/// \brief Open about modal
+	void openAbout ();
+
+	/// \brief Close all modals
+	void closeModals ();
+
 	/// \brief Upload log to paste service
 	void uploadLog ();
 #endif
@@ -160,6 +172,12 @@ private:
 
 	/// \brief Whether to show about window
 	bool m_showAbout = false;
+
+	/// \brief Modal request triggers
+	bool m_openSettingsRequested = false;
+	bool m_openHelpRequested     = false;
+	bool m_openAboutRequested    = false;
+	bool m_closeModalsRequested  = false;
 
 	/// \brief Language setting
 	Language m_langSetting = Language::English;
