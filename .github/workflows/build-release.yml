@@ -1,0 +1,127 @@
+name: Build 3DS Release
+
+on:
+  push:
+    tags:
+      - 'v*-EX*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-3ds:
+    runs-on: ubuntu-latest
+    container:
+      # Pinned, not :latest, so a toolchain update never changes a release by surprise.
+      # Bump deliberately.
+      image: devkitpro/devkitarm:20260610
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq && apt-get install -y -qq patch qrencode cmake > /dev/null
+          dkp-pacman -S --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib 3ds-jansson
+
+      # NOTE: container default shell is dash/sh -- no [[ ]], use POSIX case
+      - name: Determine release tag and channel
+        id: vars
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          case "$GITHUB_REF" in
+            refs/tags/*)
+              TAG="${GITHUB_REF#refs/tags/}"
+              ;;
+            *)
+              TAG=$(git describe --tags --always)
+              ;;
+          esac
+
+          # Stable vs beta is decided by whether master can reach this commit,
+          # NOT by "was this a tag push". A tag on an unmerged release/* branch
+          # is a beta; only merging into master declares the line stable.
+          # Push master BEFORE the tag, otherwise the tag build cannot see the
+          # merge yet and publishes as a beta. If the fetch fails we fall
+          # through to Beta (mislabelling stable as beta is recoverable).
+          # To promote a shipped beta, re-run this workflow ON THE TAG.
+          git fetch --no-tags --quiet origin +refs/heads/master:refs/remotes/origin/master || true
+          if git merge-base --is-ancestor HEAD refs/remotes/origin/master 2>/dev/null; then
+            PRERELEASE=false
+            CHANNEL=Release
+          else
+            PRERELEASE=true
+            CHANNEL=Beta
+          fi
+          {
+            echo "tag=$TAG"
+            echo "prerelease=$PRERELEASE"
+            echo "channel=$CHANNEL"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and package (EX + classic)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          chmod +x scripts/build-3ds.sh tools/bin/bannertool tools/bin/makerom
+          scripts/build-3ds.sh "${{ steps.vars.outputs.tag }}"
+
+      # Release notes: one QR per CIA (scan from FBI / a phone) plus a
+      # changelog covering every commit since the previous tag.
+      - name: Generate changelog and QR codes
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          PRERELEASE="${{ steps.vars.outputs.prerelease }}"
+
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          RANGE="${PREV:+${PREV}..}HEAD"
+
+          qrencode -s 10 -o "dist/QR-ftpd-ex-${TAG}.png" "${BASE}/ftpd-ex-${TAG}.cia"
+          qrencode -s 10 -o "dist/QR-ftpd-classic-${TAG}.png" "${BASE}/ftpd-classic-${TAG}.cia"
+
+          {
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "> **Beta build.** This comes off a branch that has not been merged"
+              echo "> into \`master\` yet, so it is not a stable version."
+              echo
+            fi
+            echo "## ftpd-EX"
+            echo
+            echo "![QR code for ftpd-ex ${TAG}](${BASE}/QR-ftpd-ex-${TAG}.png)"
+            echo
+            echo "- [ftpd-ex-${TAG}.cia](${BASE}/ftpd-ex-${TAG}.cia)"
+            echo "- [ftpd-ex-${TAG}.3dsx](${BASE}/ftpd-ex-${TAG}.3dsx)"
+            echo
+            echo "## ftpd-EX classic (text UI)"
+            echo
+            echo "![QR code for ftpd-classic ${TAG}](${BASE}/QR-ftpd-classic-${TAG}.png)"
+            echo
+            echo "- [ftpd-classic-${TAG}.cia](${BASE}/ftpd-classic-${TAG}.cia)"
+            echo "- [ftpd-classic-${TAG}.3dsx](${BASE}/ftpd-classic-${TAG}.3dsx)"
+            echo
+            echo "## Changelog"
+            echo
+            git log ${RANGE} --no-merges --pretty='- %s (%h)'
+          } > release_notes.md
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ftpd-3ds-build
+          path: dist/
+
+      - name: Create / Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: ${{ steps.vars.outputs.channel }} ${{ steps.vars.outputs.tag }}
+          draft: false
+          prerelease: ${{ steps.vars.outputs.prerelease == 'true' }}
+          body_path: release_notes.md
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,33 @@
+name: Build check
+
+on:
+  push:
+    branches: [master, 'release/*']
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-3ds:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:20260610
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq && apt-get install -y -qq patch cmake > /dev/null
+          dkp-pacman -S --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib 3ds-jansson
+
+      - name: Build and package (EX + classic)
+        run: |
+          chmod +x scripts/build-3ds.sh tools/bin/bannertool tools/bin/makerom
+          scripts/build-3ds.sh "ci-${GITHUB_SHA}"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ftpd-3ds-build
+          path: dist/
+          retention-days: 14
