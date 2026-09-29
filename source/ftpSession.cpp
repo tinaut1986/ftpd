@@ -433,6 +433,14 @@ bool FtpSession::dead ()
 	return true;
 }
 
+bool FtpSession::transferring ()
+{
+#ifndef __NDS__
+	auto const lock = std::scoped_lock (m_lock);
+#endif
+	return m_fileSize > 0 || m_filePosition > 0 || !m_workItem.empty ();
+}
+
 void FtpSession::draw ()
 {
 #ifndef __NDS__

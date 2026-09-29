@@ -437,22 +437,58 @@ void FtpServer::draw ()
 
 	{
 		auto const lock = std::scoped_lock (m_lock);
-		if (m_sessions.empty ())
+		size_t activeXfers = 0;
+		for (auto &session : m_sessions)
+		{
+			if (session->transferring ())
+				++activeXfers;
+		}
+
+		if (activeXfers > 0)
+		{
+			for (auto &session : m_sessions)
+			{
+				if (session->transferring ())
+					session->draw ();
+			}
+
+			if (activeXfers < m_sessions.size ())
+			{
+				auto const idleCount = m_sessions.size () - activeXfers;
+				ImGui::Spacing ();
+				ImGui::TextDisabled ("  + %zu %s %s",
+				    idleCount,
+				    idleCount == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL),
+				    tr (STR_IDLE));
+			}
+		}
+		else
 		{
 			ImGui::Spacing ();
-			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 130.0f), true);
+			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 138.0f), true);
 			{
 				ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  ftpd-EX");
 				ImGui::Separator ();
 				ImGui::Spacing ();
 				if (m_socket)
 				{
-					ImGui::Text ("  %s", tr (STR_CONNECT_INSTRUCTIONS));
+					ImGui::TextWrapped ("%s", tr (STR_CONNECT_INSTRUCTIONS));
+					ImGui::Spacing ();
 					ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_name.c_str ());
 					ImGui::BulletText ("%s", tr (STR_USER_LABEL));
-					ImGui::BulletText ("Storage Free: %s", getFreeSpace ().c_str ());
+					ImGui::BulletText (tr (STR_STORAGE_FREE), getFreeSpace ().c_str ());
 					ImGui::Spacing ();
-					ImGui::TextDisabled ("  %s", tr (STR_ACTIVE_TRANSFERS_HINT));
+					if (m_sessions.empty ())
+					{
+						ImGui::TextDisabled ("%s", tr (STR_ACTIVE_TRANSFERS_HINT));
+					}
+					else
+					{
+						ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f),
+						    tr (STR_SESSIONS_IDLE_HINT),
+						    m_sessions.size (),
+						    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
+					}
 				}
 				else
 				{
@@ -461,11 +497,6 @@ void FtpServer::draw ()
 				}
 			}
 			ImGui::EndChild ();
-		}
-		else
-		{
-			for (auto &session : m_sessions)
-				session->draw ();
 		}
 	}
 
@@ -753,7 +784,8 @@ void FtpServer::showMenu ()
 		m_passphraseSetting.resize (63);
 #endif
 
-		ImGui::OpenPopup ("Settings");
+		auto const title = std::string (tr (STR_SETTINGS_TITLE)) + "###Settings";
+		ImGui::OpenPopup (title.c_str ());
 	}
 
 	if (m_openHelpRequested)
@@ -763,7 +795,8 @@ void FtpServer::showMenu ()
 		m_showSettings      = false;
 		m_showAbout         = false;
 
-		ImGui::OpenPopup ("Help");
+		auto const title = std::string (tr (STR_HELP_TITLE)) + "###Help";
+		ImGui::OpenPopup (title.c_str ());
 	}
 
 	if (m_openAboutRequested)
@@ -773,7 +806,8 @@ void FtpServer::showMenu ()
 		m_showSettings       = false;
 		m_showHelp           = false;
 
-		ImGui::OpenPopup ("About");
+		auto const title = std::string (tr (STR_ABOUT_TITLE)) + "###About";
+		ImGui::OpenPopup (title.c_str ());
 	}
 
 	if (m_showSettings)
@@ -967,10 +1001,6 @@ void FtpServer::showSettings ()
 
 		ImGui::EndPopup ();
 	}
-	else
-	{
-		m_showSettings = false;
-	}
 }
 
 void FtpServer::showHelp ()
@@ -1055,10 +1085,6 @@ void FtpServer::showHelp ()
 		}
 
 		ImGui::EndPopup ();
-	}
-	else
-	{
-		m_showHelp = false;
 	}
 }
 
@@ -1185,10 +1211,6 @@ void FtpServer::showAbout ()
 #endif
 
 		ImGui::EndPopup ();
-	}
-	else
-	{
-		m_showAbout = false;
 	}
 }
 

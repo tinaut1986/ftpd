@@ -60,6 +60,9 @@ public:
 	/// \brief Whether session sockets are all inactive
 	bool dead ();
 
+	/// \brief Whether session is currently transferring data
+	bool transferring ();
+
 	/// \brief Draw session status
 	void draw ();
 
