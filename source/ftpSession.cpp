@@ -438,7 +438,17 @@ bool FtpSession::transferring ()
 #ifndef __NDS__
 	auto const lock = std::scoped_lock (m_lock);
 #endif
-	return m_fileSize > 0 || m_filePosition > 0 || !m_workItem.empty ();
+	// Only real file transfers count (not directory listings), and the card is held
+	// briefly after finishing so short transfers don't flicker on and off
+	auto const now = platform::steady_clock::now ();
+	if (m_fileSize > 0 || m_filePosition > 0)
+	{
+		m_lastTransferTime = now;
+		m_hasTransferred   = true;
+		return true;
+	}
+
+	return m_hasTransferred && now - m_lastTransferTime < std::chrono::seconds (2);
 }
 
 #ifndef CLASSIC

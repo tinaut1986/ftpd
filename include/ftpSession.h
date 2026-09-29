@@ -321,6 +321,12 @@ private:
 	/// \brief File position history deltas
 	float m_filePositionDeltas[POSITION_HISTORY];
 
+	/// \brief Last time a file transfer was observed (for UI hold-off)
+	platform::steady_clock::time_point m_lastTransferTime;
+
+	/// \brief Whether a file transfer was ever observed
+	bool m_hasTransferred = false;
+
 	/// \brief Transfer rate (EWMA low-pass filtered)
 	float m_xferRate;
 
