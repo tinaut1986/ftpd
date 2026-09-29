@@ -1,15 +1,18 @@
 # Project notes for Claude
 
 This is **ftpd-EX**, a fork of `mtheall/ftpd` (FTP server for 3DS/Switch/NDS). Our work
-is the 3DS side: a reworked ImGui UI, touchscreen support, i18n (English/Spanish) and
-assorted bug fixes. Switch/NDS/Linux code is upstream's and is not built or released
-from this fork.
+is the 3DS and Switch side: a reworked ImGui UI (`FtpServer::draw`, with a dual-screen
+layout for the 3DS and its own landscape layout for the Switch), touchscreen support,
+i18n (English/Spanish) and assorted bug fixes. NDS/Linux code is upstream's and is not
+built or released from this fork.
 
 ## Language: English in code
 
 All **comments, function names, and variable names** are written in English.
 User-facing strings live in `source/i18n.cpp` / `include/i18n.h` (English + Spanish);
-never hardcode UI text in the UI code, add a `STR_*` entry instead.
+never hardcode UI text in the UI code, add a `STR_*` entry instead. Spanish strings
+need their real accents and `ñ` (both consoles' fonts have them); the language names
+come from `getLanguageName`.
 
 ## Git remotes: `origin` is the one that matters
 
@@ -26,7 +29,7 @@ fresh clone run:
 gh repo set-default tinaut1986/ftpd
 ```
 
-## Building (3DS)
+## Building
 
 Needs devkitARM + portlibs `3ds-curl 3ds-mbedtls 3ds-zlib 3ds-jansson`
 (`dkp-pacman -S ...`). Configure downloads GSL and Dear ImGui on first run.
@@ -43,6 +46,18 @@ makerom) after code changes. `build*/` and `dist/` are gitignored.
 
 Quick 3DS-only iteration: `make -C build-3ds` produces `ftpd.elf`/`ftpd.3dsx`.
 
+Switch: needs devkitA64 + libnx and the portlibs
+`switch-curl switch-libzstd switch-jansson switch-zlib switch-mbedtls switch-glm`, plus
+ImageMagick (`convert`) and `zstd` for the texture assets.
+
+```sh
+scripts/build-switch.sh [label] # -> dist/ftpd-ex-<label>.nro, dist/ftpd-classic-<label>.nro
+```
+
+It builds `build-switch` (EX) and `build-switch-classic`. If `/opt/devkitpro` is owned by
+root, `dkp-pacman` needs root; `fakeroot dkp-pacman -S ...` works once the tree belongs to
+your user.
+
 ### Deploying to the console
 
 Run ftpd on the 3DS (anonymous, port 5000 — the user's console has been at
@@ -50,6 +65,12 @@ Run ftpd on the 3DS (anonymous, port 5000 — the user's console has been at
 
 - `/3ds/ftpd-ex.3dsx` ← `ftpd-ex-*.3dsx`
 - `/cias/ftpd-ex.cia`, `/cias/ftpd.cia` ← EX CIA; `/cias/ftpd-classic.cia` ← classic CIA
+
+The Switch runs the same ftpd on port 5000 (last seen at `192.168.1.138`); upload the
+`.nro` to `/switch/ftpd-ex.nro`. You cannot overwrite or delete the file of the program that
+is currently running (`450`/`550 I/O error`, or a bogus `No such file`): upload under another
+name, or ask the user to close it first. NROs have page-aligned sizes, so a same-size upload
+is not proof of the new build; compare checksums.
 
 `430 Invalid user` means the running ftpd has a user configured; ask the user
 rather than guessing credentials. CIAs are installed by the user with FBI.
@@ -64,6 +85,17 @@ The config file on the SD is `/config/ftpd/ftpd.cfg`.
   not a scroll offset. Use `ImGui::SetScrollY(window, y)`.
 - `FtpSession::transferring()` drives the "active transfers" cards. It must count real
   file transfers only (listings would flash cards on/off) and keeps a 2 s hold-off.
+- ImGui sets `ActiveId == window->MoveId` when a press lands on empty space, even in
+  windows that cannot move. That is not a widget grabbing the touch: `TouchScroller` must
+  not treat it as one, or horizontal drag-scrolling never starts.
+- On the Switch, Y must not reach ImGui as `ImGuiKey_GamepadFaceLeft`: holding it opens
+  ImGui's window switcher (a one-entry popup) and tapping it only focuses a menu bar.
+  `imgui_nx.cpp` sends it as `ui::KEY_Y` instead.
+- The 3DS system font reports whole glyph cells as glyph boxes, so text cannot be centered
+  from font metrics. Badge symbols (Y, X, A, B, L, R, +, -) are drawn as vector strokes in
+  `source/ui.cpp`.
+- Sizes designed for the 3DS are scaled with `ui::px()` (font size / 13); do not hardcode
+  pixel sizes in code that also runs on the Switch.
 - `BulletText` does not wrap; on the 3DS's 320px bottom screen use `bulletWrapped()`
   (`source/ftpServer.cpp`) or `TextWrapped`.
 - Empty values in `ftpd.cfg` (`user=`) are valid and must not log errors.
@@ -74,11 +106,12 @@ the user to verify on hardware. Say so instead of claiming they work.
 ## Release process
 
 Releases are built by `.github/workflows/build-release.yml` for tags matching
-`v*-EX*` (e.g. `v1.0.0-EX`; plain `vX.Y.Z` tags belong to upstream). It builds both
-variants and publishes, per tag: `ftpd-ex-<tag>.{cia,3dsx}`,
-`ftpd-classic-<tag>.{cia,3dsx}`, a QR code per CIA and an auto changelog.
-`.github/workflows/ci.yml` only builds on pushes to `master`/`release/*` and PRs.
-The devkitARM image is pinned; bump it deliberately.
+`v*-EX*` (e.g. `v1.0.0-EX`; plain `vX.Y.Z` tags belong to upstream). It builds the
+3DS (devkitARM) and Switch (devkitA64) variants in separate jobs, then publishes, per tag:
+`ftpd-ex-<tag>.{cia,3dsx,nro}`, `ftpd-classic-<tag>.{cia,3dsx,nro}` (the `.nro` from the
+Switch job), a QR code per CIA and an auto changelog.
+`.github/workflows/ci.yml` only builds (both consoles) on pushes to `master`/`release/*`
+and PRs. The devkitARM/devkitA64 images are pinned; bump them deliberately.
 
 Version numbers are meaningful, not sequential: a **minor** bump marks a milestone, a
 **patch** is an ordinary fix round. Ask before choosing a version or a minor bump;

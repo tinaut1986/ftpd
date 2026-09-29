@@ -25,9 +25,34 @@ jobs:
           chmod +x scripts/build-3ds.sh tools/bin/bannertool tools/bin/makerom
           scripts/build-3ds.sh "ci-${GITHUB_SHA}"
 
-      - name: Upload Build Artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ftpd-3ds-build
+          path: dist/
+          retention-days: 14
+
+  build-switch:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:20260219
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq && apt-get install -y -qq patch cmake imagemagick zstd > /dev/null
+          dkp-pacman -S --needed --noconfirm switch-dev switch-curl switch-libzstd switch-jansson switch-zlib switch-mbedtls switch-glm
+
+      - name: Build and package (EX + classic)
+        run: |
+          chmod +x scripts/build-switch.sh
+          scripts/build-switch.sh "ci-${GITHUB_SHA}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ftpd-switch-build
           path: dist/
           retention-days: 14

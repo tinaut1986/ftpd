@@ -1,4 +1,4 @@
-name: Build 3DS Release
+name: Build Release
 
 on:
   push:
@@ -10,29 +10,22 @@ permissions:
   contents: write
 
 jobs:
-  build-3ds:
+  # Decide the tag and the channel once, so every job uses the same version label
+  meta:
     runs-on: ubuntu-latest
-    container:
-      # Pinned, not :latest, so a toolchain update never changes a release by surprise.
-      # Bump deliberately.
-      image: devkitpro/devkitarm:20260610
-
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      prerelease: ${{ steps.vars.outputs.prerelease }}
+      channel: ${{ steps.vars.outputs.channel }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install build dependencies
-        run: |
-          apt-get update -qq && apt-get install -y -qq patch qrencode cmake > /dev/null
-          dkp-pacman -S --needed --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib 3ds-jansson
-
-      # NOTE: container default shell is dash/sh -- no [[ ]], use POSIX case
       - name: Determine release tag and channel
         id: vars
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           case "$GITHUB_REF" in
             refs/tags/*)
               TAG="${GITHUB_REF#refs/tags/}"
@@ -63,19 +56,86 @@ jobs:
             echo "channel=$CHANNEL"
           } >> "$GITHUB_OUTPUT"
 
+  build-3ds:
+    needs: meta
+    runs-on: ubuntu-latest
+    container:
+      # Pinned, not :latest, so a toolchain update never changes a release by surprise.
+      # Bump deliberately.
+      image: devkitpro/devkitarm:20260610
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq && apt-get install -y -qq patch cmake > /dev/null
+          dkp-pacman -S --needed --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib 3ds-jansson
+
       - name: Build and package (EX + classic)
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           chmod +x scripts/build-3ds.sh tools/bin/bannertool tools/bin/makerom
-          scripts/build-3ds.sh "${{ steps.vars.outputs.tag }}"
+          scripts/build-3ds.sh "${{ needs.meta.outputs.tag }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-3ds
+          path: dist/
+
+  build-switch:
+    needs: meta
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64:20260219
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq && apt-get install -y -qq patch cmake imagemagick zstd > /dev/null
+          dkp-pacman -S --needed --noconfirm switch-dev switch-curl switch-libzstd switch-jansson switch-zlib switch-mbedtls switch-glm
+
+      - name: Build and package (EX + classic)
+        run: |
+          chmod +x scripts/build-switch.sh
+          scripts/build-switch.sh "${{ needs.meta.outputs.tag }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-switch
+          path: dist/
+
+  release:
+    needs: [meta, build-3ds, build-switch]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
 
       # Release notes: one QR per CIA (scan from FBI / a phone) plus a
       # changelog covering every commit since the previous tag.
       - name: Generate changelog and QR codes
         run: |
-          TAG="${{ steps.vars.outputs.tag }}"
+          sudo apt-get update -qq && sudo apt-get install -y -qq qrencode > /dev/null
+
+          TAG="${{ needs.meta.outputs.tag }}"
           BASE="https://github.com/${{ github.repository }}/releases/download/${TAG}"
-          PRERELEASE="${{ steps.vars.outputs.prerelease }}"
+          PRERELEASE="${{ needs.meta.outputs.prerelease }}"
 
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
           RANGE="${PREV:+${PREV}..}HEAD"
@@ -89,38 +149,41 @@ jobs:
               echo "> into \`master\` yet, so it is not a stable version."
               echo
             fi
-            echo "## ftpd-EX"
+            echo "## Nintendo 3DS"
+            echo
+            echo "### ftpd-EX"
             echo
             echo "![QR code for ftpd-ex ${TAG}](${BASE}/QR-ftpd-ex-${TAG}.png)"
             echo
             echo "- [ftpd-ex-${TAG}.cia](${BASE}/ftpd-ex-${TAG}.cia)"
             echo "- [ftpd-ex-${TAG}.3dsx](${BASE}/ftpd-ex-${TAG}.3dsx)"
             echo
-            echo "## ftpd-EX classic (text UI)"
+            echo "### ftpd-EX classic (text UI)"
             echo
             echo "![QR code for ftpd-classic ${TAG}](${BASE}/QR-ftpd-classic-${TAG}.png)"
             echo
             echo "- [ftpd-classic-${TAG}.cia](${BASE}/ftpd-classic-${TAG}.cia)"
             echo "- [ftpd-classic-${TAG}.3dsx](${BASE}/ftpd-classic-${TAG}.3dsx)"
             echo
+            echo "## Nintendo Switch"
+            echo
+            echo "- [ftpd-ex-${TAG}.nro](${BASE}/ftpd-ex-${TAG}.nro)"
+            echo "- [ftpd-classic-${TAG}.nro](${BASE}/ftpd-classic-${TAG}.nro) (text UI)"
+            echo
+            echo "Copy the \`.nro\` to \`/switch/\` on the SD card and launch it from the homebrew menu."
+            echo
             echo "## Changelog"
             echo
             git log ${RANGE} --no-merges --pretty='- %s (%h)'
           } > release_notes.md
 
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ftpd-3ds-build
-          path: dist/
-
       - name: Create / Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: ${{ steps.vars.outputs.channel }} ${{ steps.vars.outputs.tag }}
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.channel }} ${{ needs.meta.outputs.tag }}
           draft: false
-          prerelease: ${{ steps.vars.outputs.prerelease == 'true' }}
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
           body_path: release_notes.md
           files: dist/*
         env:
