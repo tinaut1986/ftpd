@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 1.0.1)
+project(ftpd VERSION 1.1.0)
 
 set(FTPD_PATCH "-EX")
 
