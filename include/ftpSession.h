@@ -327,6 +327,9 @@ private:
 	/// \brief Session state
 	State m_state = State::COMMAND;
 
+	/// \brief Transfer file mode (RETR, STOR, APPE)
+	XferFileMode m_xferMode = XferFileMode::RETR;
+
 	/// \brief File being transferred
 	fs::File m_file;
 

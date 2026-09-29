@@ -441,6 +441,111 @@ bool FtpSession::transferring ()
 	return m_fileSize > 0 || m_filePosition > 0 || !m_workItem.empty ();
 }
 
+#ifndef CLASSIC
+static void drawTransferProgressBarWithGraph (
+    float fraction,
+    float const *deltas,
+    std::size_t deltaCount,
+    char const *overlayText,
+    float height = 22.0f)
+{
+	auto const &style  = ImGui::GetStyle ();
+	auto const pos     = ImGui::GetCursorScreenPos ();
+	float const availW = ImGui::GetContentRegionAvail ().x;
+	ImVec2 const size (availW, height);
+
+	// Reserve layout space in the window
+	ImGui::Dummy (size);
+
+	auto *drawList     = ImGui::GetWindowDrawList ();
+	ImVec2 const bbMin = pos;
+	ImVec2 const bbMax = ImVec2 (pos.x + size.x, pos.y + size.y);
+	float const w      = size.x;
+	float const h      = size.y;
+	float const round  = style.FrameRounding;
+	float const padX   = 2.0f;
+	float const padY   = 3.0f;
+
+	// 1. Frame Background
+	drawList->AddRectFilled (bbMin, bbMax, ImGui::GetColorU32 (ImGuiCol_FrameBg), round);
+
+	// 2. Progress fill
+	if (fraction >= 0.0f)
+	{
+		float const clamped = std::clamp (fraction, 0.0f, 1.0f);
+		if (clamped > 0.001f)
+		{
+			ImVec2 const fillMax (bbMin.x + clamped * w, bbMax.y);
+			drawList->AddRectFilled (bbMin, fillMax, IM_COL32 (28, 95, 142, 180), round);
+		}
+	}
+	else
+	{
+		// Indeterminate animated pulse for uploads or unknown size
+		float const t      = static_cast<float> (ImGui::GetTime ());
+		float const pulseW = w * 0.28f;
+		float const travel = w + pulseW;
+		float const curX   = bbMin.x + std::fmod (t * 110.0f, travel) - pulseW;
+		float const minX   = std::clamp (curX, bbMin.x, bbMax.x);
+		float const maxX   = std::clamp (curX + pulseW, bbMin.x, bbMax.x);
+		if (maxX > minX)
+		{
+			drawList->AddRectFilled (
+			    ImVec2 (minX, bbMin.y),
+			    ImVec2 (maxX, bbMax.y),
+			    IM_COL32 (35, 115, 170, 160),
+			    round);
+		}
+	}
+
+	// 3. Real-time speed waveform (Speed Graph inside the progress bar!)
+	if (deltas && deltaCount >= 2)
+	{
+		float maxVal = 1.0f;
+		for (std::size_t i = 0; i < deltaCount; ++i)
+		{
+			if (deltas[i] > maxVal)
+				maxVal = deltas[i];
+		}
+
+		float const graphW = w - padX * 2.0f;
+		float const graphH = h - padY * 2.0f;
+		float const stepX  = graphW / static_cast<float> (deltaCount - 1);
+
+		ImU32 const lineColor = IM_COL32 (70, 215, 255, 220); // Glowing cyan line
+
+		for (std::size_t i = 0; i < deltaCount - 1; ++i)
+		{
+			float const y0Norm = std::clamp (deltas[i] / maxVal, 0.0f, 1.0f);
+			float const y1Norm = std::clamp (deltas[i + 1] / maxVal, 0.0f, 1.0f);
+
+			ImVec2 const p0 (bbMin.x + padX + static_cast<float> (i) * stepX, bbMax.y - padY - y0Norm * graphH);
+			ImVec2 const p1 (bbMin.x + padX + static_cast<float> (i + 1) * stepX, bbMax.y - padY - y1Norm * graphH);
+
+			drawList->AddLine (p0, p1, lineColor, 1.25f);
+		}
+	}
+
+	// 4. Border
+	drawList->AddRect (bbMin, bbMax, ImGui::GetColorU32 (ImGuiCol_Border), round);
+
+	// 5. Centered Overlay Text with 1px black drop-shadow for crystal-clear readability
+	if (overlayText && overlayText[0] != '\0')
+	{
+		ImVec2 const textSize = ImGui::CalcTextSize (overlayText);
+		ImVec2 const textPos (
+		    bbMin.x + (w - textSize.x) * 0.5f,
+		    bbMin.y + (h - textSize.y) * 0.5f);
+
+		// Drop shadow
+		drawList->AddText (ImVec2 (textPos.x + 1.0f, textPos.y + 1.0f), IM_COL32 (0, 0, 0, 230), overlayText);
+		drawList->AddText (ImVec2 (textPos.x - 1.0f, textPos.y), IM_COL32 (0, 0, 0, 160), overlayText);
+		// Main text
+		drawList->AddText (textPos, IM_COL32 (255, 255, 255, 255), overlayText);
+	}
+}
+#endif
+
 void FtpSession::draw ()
 {
 #ifndef __NDS__
@@ -457,9 +562,9 @@ void FtpSession::draw ()
 	std::fputs (m_workItem.empty () ? m_cwd.c_str () : m_workItem.c_str (), stdout);
 #else
 #ifdef __3DS__
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 56.0f), true);
+	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 66.0f), true);
 #else
-	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 64.0f), true);
+	ImGui::BeginChild (m_windowName.c_str (), ImVec2 (0.0f, 72.0f), true);
 #endif
 
 	if (!m_workItem.empty ())
@@ -498,6 +603,7 @@ void FtpSession::draw ()
 		}
 
 		auto const rateString = fs::printSize (m_xferRate) + "/s";
+		char const *modeLabel = (m_xferMode == XferFileMode::RETR) ? tr (STR_DOWNLOADING) : tr (STR_UPLOADING);
 
 		if (m_fileSize > 0)
 		{
@@ -527,17 +633,43 @@ void FtpSession::draw ()
 			    fs::printSize (m_fileSize).c_str (),
 			    percent);
 
-			ImGui::ProgressBar (fraction, ImVec2 (-1.0f, 12.0f), progressOverlay);
+			drawTransferProgressBarWithGraph (
+			    fraction,
+			    m_filePositionDeltas,
+			    POSITION_HISTORY,
+			    progressOverlay,
+			    22.0f);
 
-			ImGui::TextColored (ImVec4 (0.35f, 0.80f, 1.0f, 1.0f), "%s", rateString.c_str ());
+			ImGui::TextColored (ImVec4 (0.35f, 0.85f, 1.0f, 1.0f), "%s", rateString.c_str ());
 			ImGui::SameLine ();
 			ImGui::TextDisabled (" • ");
 			ImGui::SameLine ();
 			ImGui::TextColored (ImVec4 (0.95f, 0.85f, 0.35f, 1.0f), "%s", etaBuf);
+			ImGui::SameLine ();
+			ImGui::TextDisabled (" • ");
+			ImGui::SameLine ();
+			ImGui::TextColored (ImVec4 (0.45f, 0.85f, 0.55f, 1.0f), "%s", modeLabel);
 		}
 		else
 		{
-			ImGui::Text ("%s  •  %s", fs::printSize (m_filePosition).c_str (), rateString.c_str ());
+			// Upload or unknown size: animated indeterminate progress + speed graph + metrics
+			char progressOverlay[64];
+			std::snprintf (progressOverlay, sizeof (progressOverlay), "%s  •  %s",
+			    fs::printSize (m_filePosition).c_str (),
+			    rateString.c_str ());
+
+			drawTransferProgressBarWithGraph (
+			    -1.0f, // animated indeterminate progress
+			    m_filePositionDeltas,
+			    POSITION_HISTORY,
+			    progressOverlay,
+			    22.0f);
+
+			ImGui::TextColored (ImVec4 (0.35f, 0.85f, 1.0f, 1.0f), "%s", rateString.c_str ());
+			ImGui::SameLine ();
+			ImGui::TextDisabled (" • ");
+			ImGui::SameLine ();
+			ImGui::TextColored (ImVec4 (0.45f, 0.85f, 0.55f, 1.0f), "%s", modeLabel);
 		}
 	}
 	else
@@ -1321,6 +1453,7 @@ int FtpSession::fillDirent (std::string const &path_, char const *type_)
 
 void FtpSession::xferFile (char const *const args_, XferFileMode const mode_)
 {
+	m_xferMode = mode_;
 	m_zFlushed = false;
 	m_eof      = false;
 
@@ -2433,7 +2566,17 @@ void FtpSession::ABOR (char const *args_)
 
 void FtpSession::ALLO (char const *args_)
 {
-	(void)args_;
+	if (args_ && *args_)
+	{
+		auto const size = std::strtoull (args_, nullptr, 10);
+		if (size > 0)
+		{
+#ifndef __NDS__
+			auto const lock = std::scoped_lock (m_lock);
+#endif
+			m_fileSize = size;
+		}
+	}
 
 	sendResponse ("202 Superfluous command\r\n");
 	setState (State::COMMAND, false, false);
