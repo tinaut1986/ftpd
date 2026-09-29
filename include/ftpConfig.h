@@ -23,6 +23,7 @@
 #pragma once
 
 #include "platform.h"
+#include "i18n.h"
 
 #include <gsl/gsl>
 
@@ -71,6 +72,9 @@ public:
 	/// \brief Get deflate level
 	int deflateLevel () const;
 
+	/// \brief Get language
+	Language language () const;
+
 #ifdef __3DS__
 	/// \brief Whether to get mtime
 	/// \note only effective on 3DS
@@ -116,6 +120,10 @@ public:
 	/// \param level_ Deflate level
 	bool setDeflateLevel (int level_);
 
+	/// \brief Set language
+	/// \param lang_ Language
+	void setLanguage (Language lang_);
+
 #ifdef __3DS__
 	/// \brief Set whether to get mtime
 	/// \param getMTime_ Whether to get mtime
@@ -158,6 +166,9 @@ private:
 
 	/// \brief Deflate level
 	int m_deflateLevel;
+
+	/// \brief Language
+	Language m_language = Language::English;
 
 #ifdef __3DS__
 	/// \brief Whether to get mtime

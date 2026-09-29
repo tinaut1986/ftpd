@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 project(ftpd VERSION 3.2.1)
 
-set(FTPD_PATCH "-3-fix")
+set(FTPD_PATCH "-EX")
 
 find_package(Patch REQUIRED)
 
@@ -66,7 +66,7 @@ endif()
 target_compile_features(${FTPD_TARGET} PRIVATE cxx_std_20)
 target_include_directories(${FTPD_TARGET} PRIVATE include)
 target_compile_definitions(${FTPD_TARGET} PRIVATE
-	STATUS_STRING="${PROJECT_NAME} v${PROJECT_VERSION}${FTPD_PATCH}"
+	STATUS_STRING="ftpd-EX v${PROJECT_VERSION}${FTPD_PATCH}"
 	IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1
 	IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS=1
 )
@@ -102,6 +102,7 @@ target_sources(${FTPD_TARGET} PRIVATE
 	include/ftpConfig.h
 	include/ftpServer.h
 	include/ftpSession.h
+	include/i18n.h
 	include/ioBuffer.h
 	include/log.h
 	include/platform.h
@@ -111,6 +112,7 @@ target_sources(${FTPD_TARGET} PRIVATE
 	source/ftpConfig.cpp
 	source/ftpServer.cpp
 	source/ftpSession.cpp
+	source/i18n.cpp
 	source/ioBuffer.cpp
 	source/log.cpp
 	source/main.cpp
@@ -274,9 +276,9 @@ elseif(NINTENDO_3DS)
 
 	if(FTPD_CLASSIC)
 		ctr_generate_smdh(${FTPD_TARGET}.smdh
-			NAME "${PROJECT_NAME} classic"
+			NAME "ftpd-EX classic"
 			DESCRIPTION "v${PROJECT_VERSION}${FTPD_PATCH}"
-			AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH"
+			AUTHOR "tinaut1986 / Michael Theall"
 			ICON meta/icon.png
 		)
 
@@ -344,9 +346,9 @@ elseif(NINTENDO_3DS)
 	)
 
 	ctr_generate_smdh(${FTPD_TARGET}.smdh
-		NAME "${PROJECT_NAME} pro"
+		NAME "ftpd-EX"
 		DESCRIPTION "v${PROJECT_VERSION}${FTPD_PATCH}"
-		AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH"
+		AUTHOR "tinaut1986 / Michael Theall"
 		ICON meta/icon.png
 	)
 

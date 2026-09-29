@@ -25,6 +25,7 @@
 #include "fs.h"
 #include "ftpConfig.h"
 #include "ftpSession.h"
+#include "i18n.h"
 #include "licenses.h"
 #include "log.h"
 #include "platform.h"
@@ -317,47 +318,80 @@ void FtpServer::draw ()
 
 	ImGui::SetNextWindowPos (ImVec2 (0, 0), ImGuiCond_FirstUseEver);
 #ifdef __3DS__
+	auto const kDown = hidKeysDown ();
+	if (kDown & KEY_Y)
+	{
+		m_showSettings = !m_showSettings;
+		if (m_showSettings)
+			m_showHelp = m_showAbout = false;
+	}
+	if (kDown & KEY_X)
+	{
+		m_showHelp = !m_showHelp;
+		if (m_showHelp)
+			m_showSettings = m_showAbout = false;
+	}
+	if ((kDown & KEY_B) && (m_showSettings || m_showHelp || m_showAbout))
+	{
+		m_showSettings = false;
+		m_showHelp     = false;
+		m_showAbout    = false;
+	}
+
 	// top screen
 	ImGui::SetNextWindowSize (ImVec2 (width, height * 0.5f));
 	{
 		std::array<char, 64> title{};
 		{
 			auto const serverLock = std::scoped_lock (m_lock);
-			std::snprintf (title.data (), title.size (), "ftpd###ftpd");
+			std::snprintf (title.data (), title.size (), "ftpd-EX###ftpd");
 		}
 
 		ImGui::Begin (title.data (),
 		    nullptr,
-		    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+		    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+		        ImGuiWindowFlags_NoNavFocus);
 	}
 
-	// Hero connection card on top screen
-	ImGui::BeginChild ("ConnCard", ImVec2 (0.0f, 38.0f), true);
+	// Header on top screen
 	{
 		auto const serverLock = std::scoped_lock (m_lock);
 		if (m_socket)
 		{
-			ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "● ONLINE ");
+			ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_ONLINE));
 			ImGui::SameLine ();
 			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
 
-			ImGui::TextDisabled ("%zu sesion%s activa%s  •  v3.2.1",
+			ImGui::TextDisabled ("%zu %s  •  v3.2.1-EX",
 			    m_sessions.size (),
-			    m_sessions.size () == 1 ? "" : "es",
-			    m_sessions.size () == 1 ? "" : "s");
+			    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
 		}
 		else
 		{
-			ImGui::TextColored (ImVec4 (1.0f, 0.65f, 0.15f, 1.0f), "○ WAITING FOR WI-FI");
+			ImGui::TextColored (ImVec4 (1.0f, 0.65f, 0.15f, 1.0f), "%s", tr (STR_WAITING_WIFI));
 			ImGui::SameLine ();
-			ImGui::TextDisabled ("•  Sin conexion");
-			ImGui::TextDisabled ("Activa el Wi-Fi en el menu HOME");
+			ImGui::TextDisabled ("%s", tr (STR_NO_CONNECTION));
+			ImGui::TextDisabled ("%s", tr (STR_ENABLE_WIFI_HINT));
 		}
 	}
-	ImGui::EndChild ();
+	ImGui::Separator ();
 
 	ImGui::BeginChild ("Logs", ImVec2 (0.0f, 0.0f), false, ImGuiWindowFlags_HorizontalScrollbar);
 	drawLog ();
+
+	// Direct D-Pad and L/R scroll controls
+	auto const kHeld = hidKeysHeld ();
+	if (!m_showSettings && !m_showHelp && !m_showAbout)
+	{
+		if (kHeld & KEY_DUP)
+			ImGui::SetScrollY (ImGui::GetScrollY () - 15.0f);
+		if (kHeld & KEY_DDOWN)
+			ImGui::SetScrollY (ImGui::GetScrollY () + 15.0f);
+		if (kHeld & KEY_L)
+			ImGui::SetScrollY (ImGui::GetScrollY () - 60.0f);
+		if (kHeld & KEY_R)
+			ImGui::SetScrollY (ImGui::GetScrollY () + 60.0f);
+	}
 	ImGui::EndChild ();
 
 	ImGui::End ();
@@ -368,7 +402,24 @@ void FtpServer::draw ()
 	ImGui::Begin ("Sessions",
 	    nullptr,
 	    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-	        ImGuiWindowFlags_MenuBar);
+	        ImGuiWindowFlags_NoNavFocus);
+
+	// Action buttons bar at the top of bottom screen
+	{
+		float const availW = ImGui::GetContentRegionAvail ().x;
+		float const btnW   = (availW - 16.0f) / 3.0f;
+
+		if (ImGui::Button (tr (STR_BTN_SETTINGS), ImVec2 (btnW, 24.0f)))
+			m_showSettings = true;
+		ImGui::SameLine ();
+		if (ImGui::Button (tr (STR_BTN_HELP), ImVec2 (btnW, 24.0f)))
+			m_showHelp = true;
+		ImGui::SameLine ();
+		if (ImGui::Button (tr (STR_BTN_SCREENS), ImVec2 (btnW, 24.0f)))
+			platform::toggleBacklight ();
+	}
+
+	ImGui::Separator ();
 
 	showMenu ();
 
@@ -377,32 +428,27 @@ void FtpServer::draw ()
 		if (m_sessions.empty ())
 		{
 			ImGui::Spacing ();
-			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 120.0f), true);
+			ImGui::BeginChild ("EmptyCard", ImVec2 (0.0f, 130.0f), true);
 			{
-				ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  Servidor FTP");
+				ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "  ftpd-EX");
 				ImGui::Separator ();
 				ImGui::Spacing ();
 				if (m_socket)
 				{
-					ImGui::Text ("  Listo para recibir conexiones");
-					ImGui::BulletText ("Servidor: %s", m_name.c_str ());
-					ImGui::BulletText ("Usuario: anonymous (o vacio)");
+					ImGui::Text ("  %s", tr (STR_CONNECT_INSTRUCTIONS));
+					ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_name.c_str ());
+					ImGui::BulletText ("%s", tr (STR_USER_LABEL));
+					ImGui::BulletText ("Storage Free: %s", getFreeSpace ().c_str ());
 					ImGui::Spacing ();
-					ImGui::TextDisabled ("  Las descargas y subidas activas apareceran aqui.");
+					ImGui::TextDisabled ("  %s", tr (STR_ACTIVE_TRANSFERS_HINT));
 				}
 				else
 				{
-					ImGui::TextColored (ImVec4 (1.0f, 0.7f, 0.2f, 1.0f), "  Esperando conexion Wi-Fi...");
-					ImGui::TextDisabled ("  Enciende el Wi-Fi para iniciar el servidor.");
+					ImGui::TextColored (ImVec4 (1.0f, 0.7f, 0.2f, 1.0f), "  %s", tr (STR_WAITING_WIFI));
+					ImGui::TextDisabled ("  %s", tr (STR_TURN_ON_WIFI_HINT));
 				}
 			}
 			ImGui::EndChild ();
-
-			ImGui::Spacing ();
-			if (ImGui::Button ("  Apagar Pantallas (SELECT)  ", ImVec2 (-1.0f, 26.0f)))
-			{
-				platform::toggleBacklight ();
-			}
 		}
 		else
 		{
@@ -462,6 +508,7 @@ UniqueFtpServer FtpServer::create ()
 	updateFreeSpace ();
 
 	auto config = FtpConfig::load (FTPDCONFIG);
+	i18n::setLanguage (config->language ());
 
 	return UniqueFtpServer (new FtpServer (std::move (config)));
 }
@@ -581,80 +628,42 @@ void FtpServer::handleNetworkLost ()
 void FtpServer::showMenu ()
 {
 	auto const prevShowSettings = m_showSettings;
+	auto const prevShowHelp     = m_showHelp;
 	auto const prevShowAbout    = m_showAbout;
 
+#ifndef __3DS__
 	if (ImGui::BeginMenuBar ())
 	{
-#if defined(__3DS__) || defined(__SWITCH__)
+#if defined(__SWITCH__)
 		if (ImGui::BeginMenu ("Menu \xee\x80\x83")) // Y Button
 #else
 		if (ImGui::BeginMenu ("Menu"))
 #endif
 		{
-			if (ImGui::MenuItem ("Settings"))
+			if (ImGui::MenuItem (tr (STR_SETTINGS_TITLE)))
 				m_showSettings = true;
 
-			if (ImGui::MenuItem ("Upload Log"))
-			{
-#ifndef __NDS__
-				auto const lock = std::scoped_lock (m_lock);
-#endif
-				if (!m_uploadLogCurlM)
-					m_uploadLogCurlM = curl_multi_init ();
+			if (ImGui::MenuItem (tr (STR_HELP_TITLE)))
+				m_showHelp = true;
 
-				if (m_uploadLogCurlM && !m_uploadLogCurl.load (std::memory_order_relaxed))
-				{
-					m_uploadLogData = getLog ();
-
-					auto const handle = curl_easy_init ();
-
-#ifndef NDEBUG
-					curl_easy_setopt (handle, CURLOPT_DEBUGFUNCTION, &curlDebug);
-					curl_easy_setopt (handle, CURLOPT_DEBUGDATA, nullptr);
-					curl_easy_setopt (handle, CURLOPT_VERBOSE, 1L);
-#endif
-
-					// write result into string
-					m_uploadLogResult.clear ();
-					curl_easy_setopt (handle, CURLOPT_WRITEFUNCTION, &curlCallback);
-					curl_easy_setopt (handle, CURLOPT_WRITEDATA, &m_uploadLogResult);
-
-					// set headers
-					static char contentType[]       = "Content-Type: text/plain";
-					static curl_slist const headers = {contentType, nullptr};
-					curl_easy_setopt (handle, CURLOPT_URL, "https://pastie.io/documents");
-					curl_easy_setopt (handle, CURLOPT_HTTPHEADER, &headers);
-
-					// set form data
-					auto const mime = curl_mime_init (handle);
-					auto const part = curl_mime_addpart (mime);
-					curl_mime_name (part, "data");
-					curl_mime_data (part, m_uploadLogData.data (), m_uploadLogData.size ());
-					curl_easy_setopt (handle, CURLOPT_MIMEPOST, mime);
-
-					// add to multi handle
-					curl_multi_add_handle (m_uploadLogCurlM, handle);
-
-					// signal network thread to process
-					m_uploadLogMime = mime;
-					m_uploadLogCurl.store (handle, std::memory_order_relaxed);
-				}
-			}
+			if (ImGui::MenuItem (tr (STR_UPLOAD_LOG)))
+				uploadLog ();
 
 			ImGui::Separator ();
 
-			if (ImGui::MenuItem ("About"))
+			if (ImGui::MenuItem (tr (STR_ABOUT)))
 				m_showAbout = true;
 
 			ImGui::Separator ();
 
-			if (ImGui::MenuItem ("Quit"))
+			if (ImGui::MenuItem (tr (STR_QUIT)))
 				m_quit = true;
 
 			ImGui::EndMenu ();
 		}
 		ImGui::EndMenuBar ();
 	}
+#endif
 
 	if (m_showSettings)
 	{
@@ -663,6 +672,7 @@ void FtpServer::showMenu ()
 #ifndef __NDS__
 			auto const lock = m_config->lockGuard ();
 #endif
+			m_langSetting = m_config->language ();
 
 			m_userSetting = m_config->user ();
 			m_userSetting.resize (32);
@@ -697,6 +707,14 @@ void FtpServer::showMenu ()
 		showSettings ();
 	}
 
+	if (m_showHelp)
+	{
+		if (!prevShowHelp)
+			ImGui::OpenPopup ("Help");
+
+		showHelp ();
+	}
+
 	if (m_showAbout)
 	{
 		if (!prevShowAbout)
@@ -715,29 +733,43 @@ void FtpServer::showSettings ()
 
 	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
 	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f));
-	if (ImGui::BeginPopupModal ("Settings",
+	if (ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
 	        nullptr,
 	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
 #else
-	if (ImGui::BeginPopupModal ("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
+	        nullptr,
+	        ImGuiWindowFlags_AlwaysAutoResize))
 #endif
 	{
-		ImGui::InputText ("User",
+		// Language selector
+		int currentLang = static_cast<int> (m_langSetting);
+		char const *languages[] = {
+			i18n::getLanguageName (Language::English),
+			i18n::getLanguageName (Language::Spanish),
+		};
+		if (ImGui::Combo (tr (STR_LANGUAGE), &currentLang, languages, IM_ARRAYSIZE (languages)))
+		{
+			m_langSetting = static_cast<Language> (currentLang);
+			i18n::setLanguage (m_langSetting);
+		}
+
+		ImGui::InputText (tr (STR_USER),
 		    m_userSetting.data (),
 		    m_userSetting.size (),
 		    ImGuiInputTextFlags_AutoSelectAll);
 
-		ImGui::InputText ("Pass",
+		ImGui::InputText (tr (STR_PASS),
 		    m_passSetting.data (),
 		    m_passSetting.size (),
 		    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_Password);
 
-		ImGui::InputText ("Hostname",
+		ImGui::InputText (tr (STR_HOSTNAME),
 		    m_hostnameSetting.data (),
 		    m_hostnameSetting.size (),
 		    ImGuiInputTextFlags_AutoSelectAll);
 
-		ImGui::InputScalar ("Port",
+		ImGui::InputScalar (tr (STR_PORT),
 		    ImGuiDataType_U16,
 		    &m_portSetting,
 		    nullptr,
@@ -746,14 +778,14 @@ void FtpServer::showSettings ()
 		    ImGuiInputTextFlags_AutoSelectAll);
 
 		ImGui::SliderInt (
-		    "Deflate Level", &m_deflateLevelSetting, Z_NO_COMPRESSION, Z_BEST_COMPRESSION);
+		    tr (STR_DEFLATE_LEVEL), &m_deflateLevelSetting, Z_NO_COMPRESSION, Z_BEST_COMPRESSION);
 
 #ifdef __3DS__
-		ImGui::Checkbox ("Get mtime", &m_getMTimeSetting);
+		ImGui::Checkbox (tr (STR_GET_MTIME), &m_getMTimeSetting);
 #endif
 
 #ifdef __SWITCH__
-		ImGui::Checkbox ("Enable Access Point", &m_enableAPSetting);
+		ImGui::Checkbox (tr (STR_ENABLE_AP), &m_enableAPSetting);
 
 		ImGui::InputText ("SSID",
 		    m_ssidSetting.data (),
@@ -772,19 +804,19 @@ void FtpServer::showSettings ()
 			ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), passphraseError);
 #endif
 
-		static ImVec2 const sizes[] = {
-		    ImGui::CalcTextSize ("Apply"),
-		    ImGui::CalcTextSize ("Save"),
-		    ImGui::CalcTextSize ("Reset"),
-		    ImGui::CalcTextSize ("Cancel"),
+		ImVec2 const sizes[] = {
+		    ImGui::CalcTextSize (tr (STR_BTN_APPLY)),
+		    ImGui::CalcTextSize (tr (STR_BTN_SAVE)),
+		    ImGui::CalcTextSize (tr (STR_BTN_RESET)),
+		    ImGui::CalcTextSize (tr (STR_BTN_CANCEL)),
 		};
 
-		static auto const maxWidth = std::max_element (
+		auto const maxWidth = std::max_element (
 		    std::begin (sizes), std::end (sizes), [] (auto const &lhs_, auto const &rhs_) {
 			    return lhs_.x < rhs_.x;
 		    })->x;
 
-		static auto const maxHeight = std::max_element (
+		auto const maxHeight = std::max_element (
 		    std::begin (sizes), std::end (sizes), [] (auto const &lhs_, auto const &rhs_) {
 			    return lhs_.y < rhs_.y;
 		    })->y;
@@ -793,13 +825,13 @@ void FtpServer::showSettings ()
 		auto const width  = maxWidth + 2 * style.FramePadding.x;
 		auto const height = maxHeight + 2 * style.FramePadding.y;
 
-		auto const apply = ImGui::Button ("Apply", ImVec2 (width, height));
+		auto const apply = ImGui::Button (tr (STR_BTN_APPLY), ImVec2 (width, height));
 		ImGui::SameLine ();
-		auto const save = ImGui::Button ("Save", ImVec2 (width, height));
+		auto const save = ImGui::Button (tr (STR_BTN_SAVE), ImVec2 (width, height));
 		ImGui::SameLine ();
-		auto const reset = ImGui::Button ("Reset", ImVec2 (width, height));
+		auto const reset = ImGui::Button (tr (STR_BTN_RESET), ImVec2 (width, height));
 		ImGui::SameLine ();
-		auto const cancel = ImGui::Button ("Cancel", ImVec2 (width, height));
+		auto const cancel = ImGui::Button (tr (STR_BTN_CANCEL), ImVec2 (width, height));
 
 		if (apply || save)
 		{
@@ -810,6 +842,7 @@ void FtpServer::showSettings ()
 			auto const lock = m_config->lockGuard ();
 #endif
 
+			m_config->setLanguage (m_langSetting);
 			m_config->setUser (m_userSetting);
 			m_config->setPass (m_passSetting);
 			m_config->setHostname (m_hostnameSetting);
@@ -846,6 +879,8 @@ void FtpServer::showSettings ()
 		{
 			static auto const defaults = FtpConfig::create ();
 
+			m_langSetting     = defaults->language ();
+			i18n::setLanguage (m_langSetting);
 			m_userSetting     = defaults->user ();
 			m_passSetting     = defaults->pass ();
 			m_hostnameSetting = defaults->hostname ();
@@ -861,9 +896,95 @@ void FtpServer::showSettings ()
 #endif
 		}
 
-		if (apply || save || cancel)
+		if (cancel)
 		{
 			m_showSettings = false;
+			i18n::setLanguage (m_config->language ());
+			ImGui::CloseCurrentPopup ();
+		}
+
+		ImGui::EndPopup ();
+	}
+}
+
+void FtpServer::showHelp ()
+{
+#ifdef __3DS__
+	auto const &io    = ImGui::GetIO ();
+	auto const width  = io.DisplaySize.x;
+	auto const height = io.DisplaySize.y;
+
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f));
+	if (ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
+	        nullptr,
+	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+#else
+	if (ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
+	        nullptr,
+	        ImGuiWindowFlags_AlwaysAutoResize))
+#endif
+	{
+		if (ImGui::BeginTabBar ("HelpTabs"))
+		{
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS)))
+			{
+				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, -32.0f), false);
+				ImGui::BulletText ("(Y): %s", tr (STR_HELP_CTRL_Y));
+				ImGui::BulletText ("(X): %s", tr (STR_HELP_CTRL_X));
+				ImGui::BulletText ("(B): %s", tr (STR_HELP_CTRL_B));
+				ImGui::BulletText ("(A): %s", tr (STR_HELP_CTRL_A));
+				ImGui::BulletText ("(D-Pad): %s", tr (STR_HELP_CTRL_DPAD));
+				ImGui::BulletText ("(L / R): %s", tr (STR_HELP_CTRL_LR));
+				ImGui::BulletText ("(SELECT): %s", tr (STR_HELP_CTRL_SELECT));
+				ImGui::BulletText ("(START): %s", tr (STR_HELP_CTRL_START));
+				ImGui::BulletText ("Touch: %s", tr (STR_HELP_CTRL_TOUCH));
+				ImGui::EndChild ();
+				ImGui::EndTabItem ();
+			}
+
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONNECT)))
+			{
+				ImGui::BeginChild ("ConnectScroll", ImVec2 (0.0f, -32.0f), false);
+				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC1));
+				ImGui::Spacing ();
+				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC2));
+				ImGui::Spacing ();
+				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC3));
+				ImGui::Separator ();
+				ImGui::BulletText ("%s %s", tr (STR_HOST_LABEL), m_socket ? m_name.c_str () : tr (STR_NO_CONNECTION));
+				ImGui::BulletText ("%s %u", tr (STR_PORT), m_config->port ());
+				ImGui::BulletText ("%s %s", tr (STR_USER), m_config->user ().empty () ? "anonymous" : m_config->user ().c_str ());
+				ImGui::EndChild ();
+				ImGui::EndTabItem ();
+			}
+
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT)))
+			{
+				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, -32.0f), false);
+				ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "ftpd-EX v3.2.1-EX");
+				ImGui::Spacing ();
+				ImGui::TextWrapped ("%s", tr (STR_ABOUT_DESC));
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", tr (STR_ABOUT_CREDITS));
+				ImGui::Spacing ();
+				if (ImGui::Button (tr (STR_UPLOAD_LOG)))
+					uploadLog ();
+				ImGui::SameLine ();
+				if (ImGui::Button (tr (STR_ABOUT)))
+				{
+					m_showAbout = true;
+				}
+				ImGui::EndChild ();
+				ImGui::EndTabItem ();
+			}
+
+			ImGui::EndTabBar ();
+		}
+
+		if (ImGui::Button (tr (STR_BTN_CLOSE), ImVec2 (-1.0f, 24.0f)))
+		{
+			m_showHelp = false;
 			ImGui::CloseCurrentPopup ();
 		}
 
@@ -884,7 +1005,7 @@ void FtpServer::showAbout ()
 	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.8f));
 	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.1f));
 #endif
-	if (ImGui::BeginPopupModal ("About",
+	if (ImGui::BeginPopupModal ((std::string (tr (STR_ABOUT_TITLE)) + "###About").c_str (),
 	        nullptr,
 	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
 	{
@@ -900,7 +1021,7 @@ void FtpServer::showAbout ()
 		ImGui::Text ("GPU Drawing Usage: %.1f%%", 6.0f * C3D_GetDrawingTime ());
 #endif
 
-		if (ImGui::Button ("OK", ImVec2 (100, 0)))
+		if (ImGui::Button (tr (STR_BTN_OK), ImVec2 (100, 0)))
 		{
 			m_showAbout = false;
 			ImGui::CloseCurrentPopup ();
@@ -994,6 +1115,53 @@ void FtpServer::showAbout ()
 #endif
 
 		ImGui::EndPopup ();
+	}
+}
+
+void FtpServer::uploadLog ()
+{
+#ifndef __NDS__
+	auto const lock = std::scoped_lock (m_lock);
+#endif
+	if (!m_uploadLogCurlM)
+		m_uploadLogCurlM = curl_multi_init ();
+
+	if (m_uploadLogCurlM && !m_uploadLogCurl.load (std::memory_order_relaxed))
+	{
+		m_uploadLogData = getLog ();
+
+		auto const handle = curl_easy_init ();
+
+#ifndef NDEBUG
+		curl_easy_setopt (handle, CURLOPT_DEBUGFUNCTION, &curlDebug);
+		curl_easy_setopt (handle, CURLOPT_DEBUGDATA, nullptr);
+		curl_easy_setopt (handle, CURLOPT_VERBOSE, 1L);
+#endif
+
+		// write result into string
+		m_uploadLogResult.clear ();
+		curl_easy_setopt (handle, CURLOPT_WRITEFUNCTION, &curlCallback);
+		curl_easy_setopt (handle, CURLOPT_WRITEDATA, &m_uploadLogResult);
+
+		// set headers
+		static char contentType[]       = "Content-Type: text/plain";
+		static curl_slist const headers = {contentType, nullptr};
+		curl_easy_setopt (handle, CURLOPT_URL, "https://pastie.io/documents");
+		curl_easy_setopt (handle, CURLOPT_HTTPHEADER, &headers);
+
+		// set form data
+		auto const mime = curl_mime_init (handle);
+		auto const part = curl_mime_addpart (mime);
+		curl_mime_name (part, "data");
+		curl_mime_data (part, m_uploadLogData.data (), m_uploadLogData.size ());
+		curl_easy_setopt (handle, CURLOPT_MIMEPOST, mime);
+
+		// add to multi handle
+		curl_multi_add_handle (m_uploadLogCurlM, handle);
+
+		// signal network thread to process
+		m_uploadLogMime = mime;
+		m_uploadLogCurl.store (handle, std::memory_order_relaxed);
 	}
 }
 #endif

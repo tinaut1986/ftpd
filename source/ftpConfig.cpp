@@ -116,7 +116,9 @@ FtpConfig::FtpConfig () : m_port (DEFAULT_PORT), m_deflateLevel (DEFAULT_DEFLATE
 
 UniqueFtpConfig FtpConfig::create ()
 {
-	return UniqueFtpConfig (new FtpConfig ());
+	auto config = UniqueFtpConfig (new FtpConfig ());
+	config->m_language = i18n::detectSystemLanguage ();
+	return config;
 }
 
 UniqueFtpConfig FtpConfig::load (gsl::not_null<gsl::czstring> const path_)
@@ -158,6 +160,13 @@ UniqueFtpConfig FtpConfig::load (gsl::not_null<gsl::czstring> const path_)
 			parseInt (port, val);
 		else if (key == "deflateLevel")
 			parseInt (deflateLevel, val);
+		else if (key == "lang")
+		{
+			if (val == "es")
+				config->m_language = Language::Spanish;
+			else if (val == "en")
+				config->m_language = Language::English;
+		}
 #ifdef __3DS__
 		else if (key == "mtime")
 		{
@@ -219,7 +228,8 @@ bool FtpConfig::save (gsl::not_null<gsl::czstring> const path_)
 	if (!m_hostname.empty ())
 		(void)std::fprintf (fp, "hostname=%s\n", m_hostname.c_str ());
 	(void)std::fprintf (fp, "port=%u\n", m_port);
-	(void)std::fprintf (fp, "deflateLevel=%u", m_deflateLevel);
+	(void)std::fprintf (fp, "deflateLevel=%u\n", m_deflateLevel);
+	(void)std::fprintf (fp, "lang=%s\n", m_language == Language::Spanish ? "es" : "en");
 
 #ifdef __3DS__
 	(void)std::fprintf (fp, "mtime=%u\n", m_getMTime);
@@ -259,6 +269,11 @@ std::uint16_t FtpConfig::port () const
 int FtpConfig::deflateLevel () const
 {
 	return m_deflateLevel;
+}
+
+Language FtpConfig::language () const
+{
+	return m_language;
 }
 
 #ifdef __3DS__
@@ -348,6 +363,11 @@ bool FtpConfig::setDeflateLevel (int const level_)
 
 	m_deflateLevel = level_;
 	return true;
+}
+
+void FtpConfig::setLanguage (Language const lang_)
+{
+	m_language = lang_;
 }
 
 #ifdef __3DS__

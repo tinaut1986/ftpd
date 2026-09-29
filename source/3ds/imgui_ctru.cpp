@@ -107,8 +107,6 @@ void updateGamepads (ImGuiIO &io_)
 	    // clang-format off
 	    std::make_pair (KEY_A,      ImGuiKey_GamepadFaceRight),
 	    std::make_pair (KEY_B,      ImGuiKey_GamepadFaceDown),
-	    std::make_pair (KEY_X,      ImGuiKey_GamepadFaceUp),
-	    std::make_pair (KEY_Y,      ImGuiKey_GamepadFaceLeft),
 	    std::make_pair (KEY_L,      ImGuiKey_GamepadL1),
 	    std::make_pair (KEY_ZL,     ImGuiKey_GamepadL1),
 	    std::make_pair (KEY_R,      ImGuiKey_GamepadR1),

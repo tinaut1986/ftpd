@@ -23,6 +23,7 @@
 #include "ftpSession.h"
 
 #include "ftpServer.h"
+#include "i18n.h"
 #include "log.h"
 #include "mdns.h"
 #include "platform.h"
@@ -533,7 +534,7 @@ void FtpSession::draw ()
 	}
 	else
 	{
-		ImGui::TextDisabled ("En espera...");
+		ImGui::TextDisabled ("%s", tr (STR_IDLE));
 	}
 
 	ImGui::EndChild ();

@@ -1,6 +1,6 @@
 BasicInfo:
-  Title                   : "ftpd"
-  ProductCode             : "ftpd"
+  Title                   : "ftpd-EX classic"
+  ProductCode             : "ftpd-EX"
   Logo                    : Homebrew # Nintendo / Licensed / Distributed / iQue / iQueForSystem
 
 TitleInfo:

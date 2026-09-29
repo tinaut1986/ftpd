@@ -1,0 +1,86 @@
+#pragma once
+
+#include <cstdint>
+
+enum class Language : std::uint8_t
+{
+	English = 0,
+	Spanish = 1,
+	Count
+};
+
+enum StringId : std::uint16_t
+{
+	STR_APP_NAME,
+	STR_APP_TITLE_BAR,
+	STR_ONLINE,
+	STR_WAITING_WIFI,
+	STR_NO_CONNECTION,
+	STR_ENABLE_WIFI_HINT,
+	STR_SESSION_SINGLE,
+	STR_SESSIONS_PLURAL,
+	STR_SESSIONS_TITLE,
+	STR_SERVER_READY,
+	STR_CONNECT_INSTRUCTIONS,
+	STR_HOST_LABEL,
+	STR_USER_LABEL,
+	STR_ACTIVE_TRANSFERS_HINT,
+	STR_TURN_ON_WIFI_HINT,
+	STR_BTN_SETTINGS,
+	STR_BTN_HELP,
+	STR_BTN_SCREENS,
+	STR_BTN_APPLY,
+	STR_BTN_SAVE,
+	STR_BTN_RESET,
+	STR_BTN_CANCEL,
+	STR_BTN_CLOSE,
+	STR_BTN_OK,
+	STR_UPLOAD_LOG,
+	STR_ABOUT,
+	STR_QUIT,
+	STR_SETTINGS_TITLE,
+	STR_HELP_TITLE,
+	STR_ABOUT_TITLE,
+	STR_LANGUAGE,
+	STR_USER,
+	STR_PASS,
+	STR_HOSTNAME,
+	STR_PORT,
+	STR_DEFLATE_LEVEL,
+	STR_GET_MTIME,
+	STR_IDLE,
+	STR_UNKNOWN_SIZE,
+	STR_HELP_TAB_CONTROLS,
+	STR_HELP_TAB_CONNECT,
+	STR_HELP_TAB_ABOUT,
+	STR_HELP_CTRL_Y,
+	STR_HELP_CTRL_X,
+	STR_HELP_CTRL_B,
+	STR_HELP_CTRL_A,
+	STR_HELP_CTRL_DPAD,
+	STR_HELP_CTRL_LR,
+	STR_HELP_CTRL_SELECT,
+	STR_HELP_CTRL_START,
+	STR_HELP_CTRL_TOUCH,
+	STR_HELP_CONNECT_DESC1,
+	STR_HELP_CONNECT_DESC2,
+	STR_HELP_CONNECT_DESC3,
+	STR_ABOUT_DESC,
+	STR_ABOUT_CREDITS,
+	STR_COUNT
+};
+
+namespace i18n
+{
+void init (Language defaultLang = Language::English);
+void setLanguage (Language lang);
+Language getLanguage ();
+char const *getLanguageName (Language lang);
+char const *get (StringId id);
+Language detectSystemLanguage ();
+}
+
+inline char const *tr (StringId id)
+{
+	return i18n::get (id);
+}

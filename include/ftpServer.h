@@ -88,8 +88,14 @@ private:
 	/// \brief Show settings menu
 	void showSettings ();
 
+	/// \brief Show help window
+	void showHelp ();
+
 	/// \brief Show about window
 	void showAbout ();
+
+	/// \brief Upload log to paste service
+	void uploadLog ();
 #endif
 
 	/// \brief Server loop
@@ -144,6 +150,9 @@ private:
 	/// \brief Whether to show settings menu
 	bool m_showSettings = false;
 
+	/// \brief Whether to show help window
+	bool m_showHelp = false;
+
 #ifdef __SWITCH__
 	/// \brief Whether to show access point menu
 	bool m_showAP = false;
@@ -151,6 +160,9 @@ private:
 
 	/// \brief Whether to show about window
 	bool m_showAbout = false;
+
+	/// \brief Language setting
+	Language m_langSetting = Language::English;
 
 	/// \brief User name setting
 	std::string m_userSetting;
