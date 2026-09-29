@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 3.2.1)
+project(ftpd VERSION 1.0.0)
 
 set(FTPD_PATCH "-EX")
+
+# Version of mtheall/ftpd this fork is based on. Update it by hand when merging upstream.
+set(FTPD_UPSTREAM_VERSION "3.2.1")
 
 find_package(Patch REQUIRED)
 
@@ -67,6 +70,8 @@ target_compile_features(${FTPD_TARGET} PRIVATE cxx_std_20)
 target_include_directories(${FTPD_TARGET} PRIVATE include)
 target_compile_definitions(${FTPD_TARGET} PRIVATE
 	STATUS_STRING="ftpd-EX v${PROJECT_VERSION}${FTPD_PATCH}"
+	FTPD_VERSION_STRING="v${PROJECT_VERSION}${FTPD_PATCH}"
+	FTPD_UPSTREAM_VERSION="${FTPD_UPSTREAM_VERSION}"
 	IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1
 	IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS=1
 )

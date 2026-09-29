@@ -74,7 +74,7 @@ the user to verify on hardware. Say so instead of claiming they work.
 ## Release process
 
 Releases are built by `.github/workflows/build-release.yml` for tags matching
-`v*-EX*` (e.g. `v3.3.0-EX`; plain `vX.Y.Z` tags belong to upstream). It builds both
+`v*-EX*` (e.g. `v1.0.0-EX`; plain `vX.Y.Z` tags belong to upstream). It builds both
 variants and publishes, per tag: `ftpd-ex-<tag>.{cia,3dsx}`,
 `ftpd-classic-<tag>.{cia,3dsx}`, a QR code per CIA and an auto changelog.
 `.github/workflows/ci.yml` only builds on pushes to `master`/`release/*` and PRs.
@@ -83,7 +83,10 @@ The devkitARM image is pinned; bump it deliberately.
 Version numbers are meaningful, not sequential: a **minor** bump marks a milestone, a
 **patch** is an ordinary fix round. Ask before choosing a version or a minor bump;
 never infer one. The base version is `project(ftpd VERSION ...)` in `CMakeLists.txt`
-(the `-EX` suffix is `FTPD_PATCH`); keep it in step with the tag.
+(the `-EX` suffix is `FTPD_PATCH`); keep it in step with the tag. This fork has its own
+numbering starting at `v1.0.0-EX`, independent of upstream. The upstream version it is
+based on is `FTPD_UPSTREAM_VERSION` in `CMakeLists.txt` (shown in the About tab): update
+it by hand whenever upstream is merged in.
 
 `master` means **stable**. Work that is not ready to be called stable stays on a
 `release/*` branch. Which path applies is the user's call, so **ask**:
@@ -91,19 +94,19 @@ never infer one. The base version is `project(ftpd VERSION ...)` in `CMakeLists.
 **Beta** — tag the unmerged branch; publishes a pre-release.
 
 ```sh
-git tag -a v3.3.0-EX -m "v3.3.0-EX"
-git push origin release/v3.3.0-EX
-git push origin v3.3.0-EX
+git tag -a v1.1.0-EX -m "v1.1.0-EX"
+git push origin release/v1.1.0-EX
+git push origin v1.1.0-EX
 ```
 
 **Stable** — merge into `master` first, then tag.
 
 ```sh
 git checkout master
-git merge --no-ff release/v3.3.0-EX
-git tag -a v3.3.0-EX -m "v3.3.0-EX"
+git merge --no-ff release/v1.1.0-EX
+git tag -a v1.1.0-EX -m "v1.1.0-EX"
 git push origin master          # master FIRST, or the tag build publishes as a beta
-git push origin v3.3.0-EX
+git push origin v1.1.0-EX
 ```
 
 The channel is decided by whether `origin/master` can reach the built commit, not by

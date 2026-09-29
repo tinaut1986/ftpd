@@ -377,7 +377,7 @@ void FtpServer::draw ()
 			ImGui::SameLine ();
 			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
 
-			ImGui::TextDisabled ("%zu %s  •  v3.2.1-EX",
+			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_STRING,
 			    m_sessions.size (),
 			    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
 		}
@@ -1107,7 +1107,8 @@ void FtpServer::showHelp ()
 			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT), nullptr, m_helpSelectedTab == 2 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
 				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, 0.0f), false);
-				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX v3.2.1-EX");
+				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX " FTPD_VERSION_STRING);
+				ImGui::TextDisabled ("based on ftpd v" FTPD_UPSTREAM_VERSION);
 				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_ABOUT_DESC));
 				ImGui::Spacing ();
