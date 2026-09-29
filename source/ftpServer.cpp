@@ -335,12 +335,7 @@ void FtpServer::draw ()
 	}
 	if (kDown & KEY_B)
 	{
-		if (m_showAbout)
-		{
-			m_showAbout = false;
-			ImGui::CloseCurrentPopup ();
-		}
-		else if (m_showSettings || m_showHelp)
+		if (m_showSettings || m_showHelp)
 		{
 			closeModals ();
 		}
@@ -686,6 +681,8 @@ void FtpServer::openSettings ()
 
 void FtpServer::openHelp ()
 {
+	if (m_helpSelectedTab < 0)
+		m_helpSelectedTab = 0;
 	m_openHelpRequested     = true;
 	m_openSettingsRequested = false;
 	m_openAboutRequested    = false;
@@ -694,9 +691,10 @@ void FtpServer::openHelp ()
 
 void FtpServer::openAbout ()
 {
-	m_openAboutRequested    = true;
+	m_helpSelectedTab       = 2;
+	m_openHelpRequested     = true;
 	m_openSettingsRequested = false;
-	m_openHelpRequested     = false;
+	m_openAboutRequested    = false;
 	m_closeModalsRequested  = false;
 }
 
@@ -807,24 +805,11 @@ void FtpServer::showMenu ()
 		ImGui::OpenPopup (title.c_str ());
 	}
 
-	if (m_openAboutRequested)
-	{
-		m_openAboutRequested = false;
-		m_showAbout          = true;
-		m_showSettings       = false;
-
-		auto const title = std::string (tr (STR_ABOUT_TITLE)) + "###About";
-		ImGui::OpenPopup (title.c_str ());
-	}
-
 	if (m_showSettings)
 		showSettings ();
 
 	if (m_showHelp)
 		showHelp ();
-
-	if (m_showAbout)
-		showAbout ();
 }
 
 void FtpServer::showSettings ()
@@ -847,14 +832,42 @@ void FtpServer::showSettings ()
 	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
 
 	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
-	        &m_showSettings,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+	        nullptr,
+	        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
 	ImGui::PopStyleColor ();
 	ImGui::PopStyleVar (2);
 
 	if (open)
 	{
+		// Top header with prominent red [X] close button
+		ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SETTINGS_TITLE));
+		ImGui::SameLine ();
+		float const closeBtnWidth = 26.0f;
+		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - 8.0f);
+		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - 2.0f);
+
+		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.75f, 0.20f, 0.20f, 0.85f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.90f, 0.28f, 0.28f, 1.00f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.95f, 0.35f, 0.35f, 1.00f));
+		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, 18.0f));
+		ImGui::PopStyleColor (3);
+
+		if (closeClicked)
+		{
+			m_showSettings = false;
+			i18n::setLanguage (m_config->language ());
+			ImGui::CloseCurrentPopup ();
+			ImGui::EndPopup ();
+			return;
+		}
+
+		ImGui::Separator ();
+		ImGui::Spacing ();
+
+		// Scrollable form area (leaves 28px for bottom action buttons)
+		ImGui::BeginChild ("SettingsForm", ImVec2 (0.0f, -28.0f), false);
+
 		// Language selector
 		int currentLang = static_cast<int> (m_langSetting);
 		char const *languages[] = {
@@ -917,36 +930,17 @@ void FtpServer::showSettings ()
 			ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), passphraseError);
 #endif
 
-		ImVec2 const sizes[] = {
-		    ImGui::CalcTextSize (tr (STR_BTN_APPLY)),
-		    ImGui::CalcTextSize (tr (STR_BTN_SAVE)),
-		    ImGui::CalcTextSize (tr (STR_BTN_RESET)),
-		    ImGui::CalcTextSize (tr (STR_BTN_CANCEL)),
-		};
+		ImGui::EndChild ();
 
-		auto const maxWidth = std::max_element (
-		    std::begin (sizes), std::end (sizes), [] (auto const &lhs_, auto const &rhs_) {
-			    return lhs_.x < rhs_.x;
-		    })->x;
-
-		auto const maxHeight = std::max_element (
-		    std::begin (sizes), std::end (sizes), [] (auto const &lhs_, auto const &rhs_) {
-			    return lhs_.y < rhs_.y;
-		    })->y;
-
+		// Bottom action buttons: Save and Reset (Cancel is done via [X] or (B))
 		auto const &style = ImGui::GetStyle ();
-		auto const width  = maxWidth + 2 * style.FramePadding.x;
-		auto const height = maxHeight + 2 * style.FramePadding.y;
+		auto const btnWidth = (ImGui::GetContentRegionAvail ().x - style.ItemSpacing.x) * 0.5f;
 
-		auto const apply = ImGui::Button (tr (STR_BTN_APPLY), ImVec2 (width, height));
+		auto const save  = ImGui::Button (tr (STR_BTN_SAVE), ImVec2 (btnWidth, 22.0f));
 		ImGui::SameLine ();
-		auto const save = ImGui::Button (tr (STR_BTN_SAVE), ImVec2 (width, height));
-		ImGui::SameLine ();
-		auto const reset = ImGui::Button (tr (STR_BTN_RESET), ImVec2 (width, height));
-		ImGui::SameLine ();
-		auto const cancel = ImGui::Button (tr (STR_BTN_CANCEL), ImVec2 (width, height));
+		auto const reset = ImGui::Button (tr (STR_BTN_RESET), ImVec2 (btnWidth, 22.0f));
 
-		if (apply || save)
+		if (save)
 		{
 			m_showSettings = false;
 			ImGui::CloseCurrentPopup ();
@@ -977,13 +971,7 @@ void FtpServer::showSettings ()
 			LOCKED (socket = std::move (m_socket));
 
 			mdns::setHostname (m_hostnameSetting);
-		}
 
-		if (save)
-		{
-#ifndef __NDS__
-			auto const lock = m_config->lockGuard ();
-#endif
 			if (!m_config->save (FTPDCONFIG))
 				error ("Failed to save config\n");
 		}
@@ -1007,13 +995,6 @@ void FtpServer::showSettings ()
 			m_ssidSetting       = defaults->ssid ();
 			m_passphraseSetting = defaults->passphrase ();
 #endif
-		}
-
-		if (cancel)
-		{
-			m_showSettings = false;
-			i18n::setLanguage (m_config->language ());
-			ImGui::CloseCurrentPopup ();
 		}
 
 		ImGui::EndPopup ();
@@ -1045,19 +1026,43 @@ void FtpServer::showHelp ()
 	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
 
 	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
-	        &m_showHelp,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+	        nullptr,
+	        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
 	ImGui::PopStyleColor ();
 	ImGui::PopStyleVar (2);
 
 	if (open)
 	{
+		// Top header with prominent red [X] close button
+		ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_HELP_TITLE));
+		ImGui::SameLine ();
+		float const closeBtnWidth = 26.0f;
+		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - 8.0f);
+		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - 2.0f);
+
+		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.75f, 0.20f, 0.20f, 0.85f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.90f, 0.28f, 0.28f, 1.00f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.95f, 0.35f, 0.35f, 1.00f));
+		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, 18.0f));
+		ImGui::PopStyleColor (3);
+
+		if (closeClicked)
+		{
+			m_showHelp = false;
+			ImGui::CloseCurrentPopup ();
+			ImGui::EndPopup ();
+			return;
+		}
+
+		ImGui::Separator ();
+		ImGui::Spacing ();
+
 		if (ImGui::BeginTabBar ("HelpTabs"))
 		{
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS)))
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS), nullptr, m_helpSelectedTab == 0 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
-				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, -32.0f), false);
+				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, 0.0f), false);
 				ImGui::BulletText ("(Y): %s", tr (STR_HELP_CTRL_Y));
 				ImGui::BulletText ("(X): %s", tr (STR_HELP_CTRL_X));
 				ImGui::BulletText ("(B): %s", tr (STR_HELP_CTRL_B));
@@ -1071,9 +1076,9 @@ void FtpServer::showHelp ()
 				ImGui::EndTabItem ();
 			}
 
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONNECT)))
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONNECT), nullptr, m_helpSelectedTab == 1 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
-				ImGui::BeginChild ("ConnectScroll", ImVec2 (0.0f, -32.0f), false);
+				ImGui::BeginChild ("ConnectScroll", ImVec2 (0.0f, 0.0f), false);
 				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC1));
 				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC2));
@@ -1087,35 +1092,137 @@ void FtpServer::showHelp ()
 				ImGui::EndTabItem ();
 			}
 
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT)))
+			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT), nullptr, m_helpSelectedTab == 2 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
-				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, -32.0f), false);
-				ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "ftpd-EX v3.2.1-EX");
+				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, 0.0f), false);
+				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX v3.2.1-EX");
 				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_ABOUT_DESC));
-				ImGui::Separator ();
+				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_ABOUT_CREDITS));
 				ImGui::Spacing ();
-				if (ImGui::Button (tr (STR_UPLOAD_LOG)))
+
+				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (-1.0f, 22.0f)))
 					uploadLog ();
-				ImGui::SameLine ();
-				if (ImGui::Button (tr (STR_BTN_ABOUT_DETAILS)))
+				ImGui::Spacing ();
+
+				ImGui::Separator ();
+				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
+				auto const &io = ImGui::GetIO ();
+				ImGui::BulletText ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
+				ImGui::BulletText ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
+
+#ifdef __3DS__
+				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
+				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
+				ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
+				ImGui::TextDisabled ("  (%s)", tr (STR_GPU_PROC_NOTE));
+#endif
+				ImGui::Spacing ();
+
+				ImGui::Separator ();
+				if (ImGui::TreeNode (tr (STR_SECTION_CONNECTIONS)))
 				{
-					m_showAbout = true;
-					auto const title = std::string (tr (STR_ABOUT_TITLE)) + "###About";
-					ImGui::OpenPopup (title.c_str ());
+					if (m_sessions.empty ())
+						ImGui::TextDisabled ("%s", tr (STR_NO_ACTIVE_SESSIONS));
+					else
+					{
+						for (auto const &session : m_sessions)
+							session->drawConnections ();
+					}
+					ImGui::TreePop ();
 				}
+
+				ImGui::Separator ();
+				if (ImGui::TreeNode (tr (STR_SECTION_LICENSES)))
+				{
+					if (ImGui::TreeNode (g_dearImGuiVersion))
+					{
+						ImGui::TextWrapped ("%s", g_dearImGuiCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_mitLicense);
+						ImGui::TreePop ();
+					}
+
+#if defined(__NDS__)
+#elif defined(__3DS__)
+					if (ImGui::TreeNode (g_libctruVersion))
+					{
+						ImGui::TextWrapped ("%s", g_zlibLicense);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_zlibLicense);
+						ImGui::TreePop ();
+					}
+
+					if (ImGui::TreeNode (g_citro3dVersion))
+					{
+						ImGui::TextWrapped ("%s", g_citro3dCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_zlibLicense);
+						ImGui::TreePop ();
+					}
+#elif defined(__SWITCH__)
+					if (ImGui::TreeNode (g_libnxVersion))
+					{
+						ImGui::TextWrapped ("%s", g_libnxCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_libnxLicense);
+						ImGui::TreePop ();
+					}
+
+					if (ImGui::TreeNode (g_deko3dVersion))
+					{
+						ImGui::TextWrapped ("%s", g_deko3dCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_zlibLicense);
+						ImGui::TreePop ();
+					}
+
+					if (ImGui::TreeNode (g_zstdVersion))
+					{
+						ImGui::TextWrapped ("%s", g_zstdCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_zstdLicense);
+						ImGui::TreePop ();
+					}
+#else
+					if (ImGui::TreeNode (g_glfwVersion))
+					{
+						ImGui::TextWrapped ("%s", g_glfwCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_zlibLicense);
+						ImGui::TreePop ();
+					}
+#endif
+
+#if defined(__NDS__) || defined(__3DS__) || defined(__SWITCH__)
+					if (ImGui::TreeNode (g_globVersion))
+					{
+						ImGui::TextWrapped ("%s", g_globCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_globLicense);
+						ImGui::TreePop ();
+					}
+
+					if (ImGui::TreeNode (g_collateVersion))
+					{
+						ImGui::TextWrapped ("%s", g_collateCopyright);
+						ImGui::Separator ();
+						ImGui::TextWrapped ("%s", g_collateLicense);
+						ImGui::TreePop ();
+					}
+#endif
+					ImGui::TreePop ();
+				}
+
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
 
-			ImGui::EndTabBar ();
-		}
+			// Clear selected tab trigger after processing
+			m_helpSelectedTab = -1;
 
-		if (ImGui::Button (tr (STR_BTN_CLOSE), ImVec2 (-1.0f, 24.0f)))
-		{
-			m_showHelp = false;
-			ImGui::CloseCurrentPopup ();
+			ImGui::EndTabBar ();
 		}
 
 		ImGui::EndPopup ();
@@ -1128,161 +1235,7 @@ void FtpServer::showHelp ()
 
 void FtpServer::showAbout ()
 {
-	auto const &io = ImGui::GetIO ();
-
-#ifdef __3DS__
-	// Stacked child modal inset further (292x212 inside 320x240 screen, X: 40..360, Y: 240..480)
-	ImGui::SetNextWindowSize (ImVec2 (292.0f, 212.0f));
-	ImGui::SetNextWindowPos (ImVec2 (54.0f, 254.0f));
-#else
-	auto const width  = io.DisplaySize.x;
-	auto const height = io.DisplaySize.y;
-
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.80f, height * 0.80f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.10f, height * 0.10f));
-#endif
-
-	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
-	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
-	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
-
-	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_ABOUT_TITLE)) + "###About").c_str (),
-	        &m_showAbout,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
-
-	ImGui::PopStyleColor ();
-	ImGui::PopStyleVar (2);
-
-	if (open)
-	{
-		ImGui::BeginChild ("AboutScrollArea", ImVec2 (0.0f, -28.0f), false);
-
-		ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", STATUS_STRING);
-		ImGui::TextWrapped ("Copyright © 2024 Michael Theall, Dave Murphy, TuxSH\nftpd-EX por tinaut1986");
-		ImGui::Spacing ();
-
-		ImGui::Separator ();
-		ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
-		ImGui::BulletText ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
-		ImGui::BulletText ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
-
-#ifdef __3DS__
-		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
-		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
-		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
-		ImGui::TextDisabled ("  (%s)", tr (STR_GPU_PROC_NOTE));
-#endif
-		ImGui::Spacing ();
-
-		ImGui::Separator ();
-		if (ImGui::TreeNode (tr (STR_SECTION_CONNECTIONS)))
-		{
-			if (m_sessions.empty ())
-				ImGui::TextDisabled ("%s", tr (STR_NO_ACTIVE_SESSIONS));
-			else
-			{
-				for (auto const &session : m_sessions)
-					session->drawConnections ();
-			}
-			ImGui::TreePop ();
-		}
-
-		ImGui::Separator ();
-		if (ImGui::TreeNode (tr (STR_SECTION_LICENSES)))
-		{
-			if (ImGui::TreeNode (g_dearImGuiVersion))
-			{
-				ImGui::TextWrapped ("%s", g_dearImGuiCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_mitLicense);
-				ImGui::TreePop ();
-			}
-
-#if defined(__NDS__)
-#elif defined(__3DS__)
-			if (ImGui::TreeNode (g_libctruVersion))
-			{
-				ImGui::TextWrapped ("%s", g_zlibLicense);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_zlibLicense);
-				ImGui::TreePop ();
-			}
-
-			if (ImGui::TreeNode (g_citro3dVersion))
-			{
-				ImGui::TextWrapped ("%s", g_citro3dCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_zlibLicense);
-				ImGui::TreePop ();
-			}
-#elif defined(__SWITCH__)
-			if (ImGui::TreeNode (g_libnxVersion))
-			{
-				ImGui::TextWrapped ("%s", g_libnxCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_libnxLicense);
-				ImGui::TreePop ();
-			}
-
-			if (ImGui::TreeNode (g_deko3dVersion))
-			{
-				ImGui::TextWrapped ("%s", g_deko3dCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_zlibLicense);
-				ImGui::TreePop ();
-			}
-
-			if (ImGui::TreeNode (g_zstdVersion))
-			{
-				ImGui::TextWrapped ("%s", g_zstdCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_zstdLicense);
-				ImGui::TreePop ();
-			}
-#else
-			if (ImGui::TreeNode (g_glfwVersion))
-			{
-				ImGui::TextWrapped ("%s", g_glfwCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_zlibLicense);
-				ImGui::TreePop ();
-			}
-#endif
-
-#if defined(__NDS__) || defined(__3DS__) || defined(__SWITCH__)
-			if (ImGui::TreeNode (g_globVersion))
-			{
-				ImGui::TextWrapped ("%s", g_globCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_globLicense);
-				ImGui::TreePop ();
-			}
-
-			if (ImGui::TreeNode (g_collateVersion))
-			{
-				ImGui::TextWrapped ("%s", g_collateCopyright);
-				ImGui::Separator ();
-				ImGui::TextWrapped ("%s", g_collateLicense);
-				ImGui::TreePop ();
-			}
-#endif
-			ImGui::TreePop ();
-		}
-
-		ImGui::EndChild ();
-
-		if (ImGui::Button (tr (STR_BTN_CLOSE), ImVec2 (-1.0f, 24.0f)))
-		{
-			m_showAbout = false;
-			ImGui::CloseCurrentPopup ();
-		}
-
-		ImGui::EndPopup ();
-	}
-	else
-	{
-		m_showAbout = false;
-	}
+	openAbout ();
 }
 
 void FtpServer::uploadLog ()

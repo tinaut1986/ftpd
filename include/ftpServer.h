@@ -165,6 +165,9 @@ private:
 	/// \brief Whether to show help window
 	bool m_showHelp = false;
 
+	/// \brief Selected tab for help window (-1 = default/current, 2 = About)
+	int m_helpSelectedTab = -1;
+
 #ifdef __SWITCH__
 	/// \brief Whether to show access point menu
 	bool m_showAP = false;
