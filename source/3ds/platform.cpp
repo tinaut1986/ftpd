@@ -600,6 +600,7 @@ bool platform::init ()
 	style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4 (0.30f, 0.38f, 0.50f, 1.00f);
 	style.Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4 (0.38f, 0.48f, 0.62f, 1.00f);
 	style.Colors[ImGuiCol_Separator]            = ImVec4 (0.20f, 0.25f, 0.34f, 0.50f);
+	style.Colors[ImGuiCol_ModalWindowDimBg]     = ImVec4 (0.00f, 0.00f, 0.00f, 0.65f);
 #endif
 
 	return true;

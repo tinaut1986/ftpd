@@ -333,9 +333,17 @@ void FtpServer::draw ()
 		else
 			openHelp ();
 	}
-	if ((kDown & KEY_B) && (m_showSettings || m_showHelp || m_showAbout))
+	if (kDown & KEY_B)
 	{
-		closeModals ();
+		if (m_showAbout)
+		{
+			m_showAbout = false;
+			ImGui::CloseCurrentPopup ();
+		}
+		else if (m_showSettings || m_showHelp)
+		{
+			closeModals ();
+		}
 	}
 
 	// top screen
@@ -804,7 +812,6 @@ void FtpServer::showMenu ()
 		m_openAboutRequested = false;
 		m_showAbout          = true;
 		m_showSettings       = false;
-		m_showHelp           = false;
 
 		auto const title = std::string (tr (STR_ABOUT_TITLE)) + "###About";
 		ImGui::OpenPopup (title.c_str ());
@@ -823,20 +830,30 @@ void FtpServer::showMenu ()
 void FtpServer::showSettings ()
 {
 #ifdef __3DS__
+	// Inset modal from bottom screen edges (320x240 on bottom screen, X: 40..360, Y: 240..480)
+	ImGui::SetNextWindowSize (ImVec2 (304.0f, 224.0f));
+	ImGui::SetNextWindowPos (ImVec2 (48.0f, 248.0f));
+#else
 	auto const &io    = ImGui::GetIO ();
 	auto const width  = io.DisplaySize.x;
 	auto const height = io.DisplaySize.y;
 
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f));
-	if (ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
-	        nullptr,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
-#else
-	if (ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
-	        nullptr,
-	        ImGuiWindowFlags_AlwaysAutoResize))
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.85f, height * 0.85f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.075f, height * 0.075f));
 #endif
+
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
+	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
+
+	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_SETTINGS_TITLE)) + "###Settings").c_str (),
+	        &m_showSettings,
+	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+	ImGui::PopStyleColor ();
+	ImGui::PopStyleVar (2);
+
+	if (open)
 	{
 		// Language selector
 		int currentLang = static_cast<int> (m_langSetting);
@@ -1001,25 +1018,40 @@ void FtpServer::showSettings ()
 
 		ImGui::EndPopup ();
 	}
+	else
+	{
+		m_showSettings = false;
+		i18n::setLanguage (m_config->language ());
+	}
 }
 
 void FtpServer::showHelp ()
 {
 #ifdef __3DS__
+	// Inset modal from bottom screen edges (320x240 on bottom screen, X: 40..360, Y: 240..480)
+	ImGui::SetNextWindowSize (ImVec2 (304.0f, 224.0f));
+	ImGui::SetNextWindowPos (ImVec2 (48.0f, 248.0f));
+#else
 	auto const &io    = ImGui::GetIO ();
 	auto const width  = io.DisplaySize.x;
 	auto const height = io.DisplaySize.y;
 
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f));
-	if (ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
-	        nullptr,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
-#else
-	if (ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
-	        nullptr,
-	        ImGuiWindowFlags_AlwaysAutoResize))
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.85f, height * 0.85f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.075f, height * 0.075f));
 #endif
+
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
+	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
+
+	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_HELP_TITLE)) + "###Help").c_str (),
+	        &m_showHelp,
+	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+	ImGui::PopStyleColor ();
+	ImGui::PopStyleVar (2);
+
+	if (open)
 	{
 		if (ImGui::BeginTabBar ("HelpTabs"))
 		{
@@ -1067,9 +1099,11 @@ void FtpServer::showHelp ()
 				if (ImGui::Button (tr (STR_UPLOAD_LOG)))
 					uploadLog ();
 				ImGui::SameLine ();
-				if (ImGui::Button (tr (STR_ABOUT)))
+				if (ImGui::Button (tr (STR_BTN_ABOUT_DETAILS)))
 				{
-					openAbout ();
+					m_showAbout = true;
+					auto const title = std::string (tr (STR_ABOUT_TITLE)) + "###About";
+					ImGui::OpenPopup (title.c_str ());
 				}
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
@@ -1086,131 +1120,168 @@ void FtpServer::showHelp ()
 
 		ImGui::EndPopup ();
 	}
+	else
+	{
+		m_showHelp = false;
+	}
 }
 
 void FtpServer::showAbout ()
 {
-	auto const &io    = ImGui::GetIO ();
+	auto const &io = ImGui::GetIO ();
+
+#ifdef __3DS__
+	// Stacked child modal inset further (292x212 inside 320x240 screen, X: 40..360, Y: 240..480)
+	ImGui::SetNextWindowSize (ImVec2 (292.0f, 212.0f));
+	ImGui::SetNextWindowPos (ImVec2 (54.0f, 254.0f));
+#else
 	auto const width  = io.DisplaySize.x;
 	auto const height = io.DisplaySize.y;
 
-#ifdef __3DS__
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.5f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.5f));
-#else
-	ImGui::SetNextWindowSize (ImVec2 (width * 0.8f, height * 0.8f));
-	ImGui::SetNextWindowPos (ImVec2 (width * 0.1f, height * 0.1f));
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.80f, height * 0.80f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.10f, height * 0.10f));
 #endif
-	if (ImGui::BeginPopupModal ((std::string (tr (STR_ABOUT_TITLE)) + "###About").c_str (),
-	        nullptr,
-	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize))
+
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
+	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
+
+	bool const open = ImGui::BeginPopupModal ((std::string (tr (STR_ABOUT_TITLE)) + "###About").c_str (),
+	        &m_showAbout,
+	        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+	ImGui::PopStyleColor ();
+	ImGui::PopStyleVar (2);
+
+	if (open)
 	{
-		ImGui::TextUnformatted (STATUS_STRING);
-		ImGui::TextWrapped ("Copyright © 2024 Michael Theall, Dave Murphy, TuxSH");
+		ImGui::BeginChild ("AboutScrollArea", ImVec2 (0.0f, -28.0f), false);
+
+		ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", STATUS_STRING);
+		ImGui::TextWrapped ("Copyright © 2024 Michael Theall, Dave Murphy, TuxSH\nftpd-EX por tinaut1986");
+		ImGui::Spacing ();
+
 		ImGui::Separator ();
-		ImGui::Text ("Platform: %s", io.BackendPlatformName);
-		ImGui::Text ("Renderer: %s", io.BackendRendererName);
+		ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
+		ImGui::BulletText ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
+		ImGui::BulletText ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
 
 #ifdef __3DS__
-		ImGui::Text ("Command Buffer Usage: %.1f%%", 100.0f * C3D_GetCmdBufUsage ());
-		ImGui::Text ("GPU Processing Usage: %.1f%%", 6.0f * C3D_GetProcessingTime ());
-		ImGui::Text ("GPU Drawing Usage: %.1f%%", 6.0f * C3D_GetDrawingTime ());
+		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
+		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
+		ImGui::BulletText ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
+		ImGui::TextDisabled ("  (%s)", tr (STR_GPU_PROC_NOTE));
+#endif
+		ImGui::Spacing ();
+
+		ImGui::Separator ();
+		if (ImGui::TreeNode (tr (STR_SECTION_CONNECTIONS)))
+		{
+			if (m_sessions.empty ())
+				ImGui::TextDisabled ("%s", tr (STR_NO_ACTIVE_SESSIONS));
+			else
+			{
+				for (auto const &session : m_sessions)
+					session->drawConnections ();
+			}
+			ImGui::TreePop ();
+		}
+
+		ImGui::Separator ();
+		if (ImGui::TreeNode (tr (STR_SECTION_LICENSES)))
+		{
+			if (ImGui::TreeNode (g_dearImGuiVersion))
+			{
+				ImGui::TextWrapped ("%s", g_dearImGuiCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_mitLicense);
+				ImGui::TreePop ();
+			}
+
+#if defined(__NDS__)
+#elif defined(__3DS__)
+			if (ImGui::TreeNode (g_libctruVersion))
+			{
+				ImGui::TextWrapped ("%s", g_zlibLicense);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_zlibLicense);
+				ImGui::TreePop ();
+			}
+
+			if (ImGui::TreeNode (g_citro3dVersion))
+			{
+				ImGui::TextWrapped ("%s", g_citro3dCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_zlibLicense);
+				ImGui::TreePop ();
+			}
+#elif defined(__SWITCH__)
+			if (ImGui::TreeNode (g_libnxVersion))
+			{
+				ImGui::TextWrapped ("%s", g_libnxCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_libnxLicense);
+				ImGui::TreePop ();
+			}
+
+			if (ImGui::TreeNode (g_deko3dVersion))
+			{
+				ImGui::TextWrapped ("%s", g_deko3dCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_zlibLicense);
+				ImGui::TreePop ();
+			}
+
+			if (ImGui::TreeNode (g_zstdVersion))
+			{
+				ImGui::TextWrapped ("%s", g_zstdCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_zstdLicense);
+				ImGui::TreePop ();
+			}
+#else
+			if (ImGui::TreeNode (g_glfwVersion))
+			{
+				ImGui::TextWrapped ("%s", g_glfwCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_zlibLicense);
+				ImGui::TreePop ();
+			}
 #endif
 
-		if (ImGui::Button (tr (STR_BTN_OK), ImVec2 (100, 0)))
+#if defined(__NDS__) || defined(__3DS__) || defined(__SWITCH__)
+			if (ImGui::TreeNode (g_globVersion))
+			{
+				ImGui::TextWrapped ("%s", g_globCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_globLicense);
+				ImGui::TreePop ();
+			}
+
+			if (ImGui::TreeNode (g_collateVersion))
+			{
+				ImGui::TextWrapped ("%s", g_collateCopyright);
+				ImGui::Separator ();
+				ImGui::TextWrapped ("%s", g_collateLicense);
+				ImGui::TreePop ();
+			}
+#endif
+			ImGui::TreePop ();
+		}
+
+		ImGui::EndChild ();
+
+		if (ImGui::Button (tr (STR_BTN_CLOSE), ImVec2 (-1.0f, 24.0f)))
 		{
 			m_showAbout = false;
 			ImGui::CloseCurrentPopup ();
 		}
 
-		ImGui::Separator ();
-		if (ImGui::TreeNode ("Connections"))
-		{
-			for (auto const &session : m_sessions)
-				session->drawConnections ();
-			ImGui::TreePop ();
-		}
-
-		ImGui::Separator ();
-		if (ImGui::TreeNode (g_dearImGuiVersion))
-		{
-			ImGui::TextWrapped ("%s", g_dearImGuiCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_mitLicense);
-			ImGui::TreePop ();
-		}
-
-#if defined(__NDS__)
-#elif defined(__3DS__)
-		if (ImGui::TreeNode (g_libctruVersion))
-		{
-			ImGui::TextWrapped ("%s", g_zlibLicense);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_zlibLicense);
-			ImGui::TreePop ();
-		}
-
-		if (ImGui::TreeNode (g_citro3dVersion))
-		{
-			ImGui::TextWrapped ("%s", g_citro3dCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_zlibLicense);
-			ImGui::TreePop ();
-		}
-
-#elif defined(__SWITCH__)
-		if (ImGui::TreeNode (g_libnxVersion))
-		{
-			ImGui::TextWrapped ("%s", g_libnxCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_libnxLicense);
-			ImGui::TreePop ();
-		}
-
-		if (ImGui::TreeNode (g_deko3dVersion))
-		{
-			ImGui::TextWrapped ("%s", g_deko3dCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_zlibLicense);
-			ImGui::TreePop ();
-		}
-
-		if (ImGui::TreeNode (g_zstdVersion))
-		{
-			ImGui::TextWrapped ("%s", g_zstdCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_zstdLicense);
-			ImGui::TreePop ();
-		}
-#else
-		if (ImGui::TreeNode (g_glfwVersion))
-		{
-			ImGui::TextWrapped ("%s", g_glfwCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_zlibLicense);
-			ImGui::TreePop ();
-		}
-#endif
-
-#if defined(__NDS__) || defined(__3DS__) || defined(__SWITCH__)
-		if (ImGui::TreeNode (g_globVersion))
-		{
-			ImGui::TextWrapped ("%s", g_globCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_globLicense);
-			ImGui::TreePop ();
-		}
-
-		if (ImGui::TreeNode (g_collateVersion))
-		{
-			ImGui::TextWrapped ("%s", g_collateCopyright);
-			ImGui::Separator ();
-			ImGui::TextWrapped ("%s", g_collateLicense);
-			ImGui::TreePop ();
-		}
-#endif
-
 		ImGui::EndPopup ();
+	}
+	else
+	{
+		m_showAbout = false;
 	}
 }
 
