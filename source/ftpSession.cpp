@@ -1654,20 +1654,30 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 
 	if (std::strlen (args_) > 0)
 	{
-		// work around broken clients that think LIST -a/-l is valid
-		auto const needWorkaround = workaround_ && args_[0] == '-' &&
-		                            (args_[1] == 'a' || args_[1] == 'l') &&
-		                            (args_[2] == '\0' || args_[2] == ' ');
+		auto const tryWorkaround = [this, mode_] (char const *args) {
+			char const *realArgs = args;
+			while (*realArgs == '-')
+			{
+				while (*realArgs && *realArgs != ' ')
+					++realArgs;
+				while (*realArgs == ' ')
+					++realArgs;
+			}
+
+			if (realArgs != args)
+			{
+				xferDir (realArgs, mode_, false);
+				return true;
+			}
+			return false;
+		};
 
 		// an argument was provided
 		auto const path = buildResolvedPath (m_cwd, args_);
 		if (path.empty ())
 		{
-			if (needWorkaround)
-			{
-				xferDir (args_ + 2 + (args_[2] == ' '), mode_, false);
+			if (workaround_ && tryWorkaround (args_))
 				return;
-			}
 
 			sendResponse ("550 %s\r\n", std::strerror (errno));
 			setState (State::COMMAND, true, true);
@@ -1677,11 +1687,8 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 		stat_t st;
 		if (tzStat (path.c_str (), &st) != 0)
 		{
-			if (needWorkaround)
-			{
-				xferDir (args_ + 2 + (args_[2] == ' '), mode_, false);
+			if (workaround_ && tryWorkaround (args_))
 				return;
-			}
 
 			sendResponse ("550 %s\r\n", std::strerror (errno));
 			setState (State::COMMAND, true, true);
@@ -1722,6 +1729,16 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 					setState (State::COMMAND, true, true);
 					return;
 				}
+			}
+			else if (mode_ == XferDirMode::LIST)
+			{
+				fillDirent (st, ".");
+				stat_t parentSt;
+				auto const parent = buildResolvedPath (m_lwd, "..");
+				if (!parent.empty () && tzStat (parent.c_str (), &parentSt) == 0)
+					fillDirent (parentSt, "..");
+				else
+					fillDirent (st, "..");
 			}
 
 			LOCKED (m_workItem = m_lwd);
@@ -1793,6 +1810,20 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 				sendResponse ("550 %s\r\n", std::strerror (rc));
 				setState (State::COMMAND, true, true);
 				return;
+			}
+		}
+		else if (mode_ == XferDirMode::LIST)
+		{
+			stat_t st;
+			if (tzStat (m_lwd.c_str (), &st) == 0)
+			{
+				fillDirent (st, ".");
+				stat_t parentSt;
+				auto const parent = buildResolvedPath (m_lwd, "..");
+				if (!parent.empty () && tzStat (parent.c_str (), &parentSt) == 0)
+					fillDirent (parentSt, "..");
+				else
+					fillDirent (st, "..");
 			}
 		}
 
@@ -2085,6 +2116,20 @@ void FtpSession::sendResponse (std::string_view const response_)
 
 	std::memcpy (buffer, response_.data (), response_.size ());
 	m_responseBuffer.markUsed (response_.size ());
+
+	// try to write data immediately
+	assert (m_commandSocket);
+	auto const bytes = m_commandSocket->write (m_responseBuffer);
+	if (bytes <= 0)
+	{
+		if (bytes == 0 || errno != EWOULDBLOCK)
+			closeCommand ();
+	}
+	else
+	{
+		m_timestamp = std::time (nullptr);
+		m_responseBuffer.coalesce ();
+	}
 }
 
 bool FtpSession::deflateBuffer (bool const flush_)
@@ -2261,7 +2306,7 @@ bool FtpSession::listTransfer ()
 				auto const entry = &dir->entry_data[dir->index];
 
 				if (entry->attributes & FS_ATTRIBUTE_DIRECTORY)
-					st.st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH;
+					st.st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH | S_IXUSR | S_IXGRP | S_IXOTH;
 				else
 					st.st_mode = S_IFREG | S_IRUSR | S_IRGRP | S_IROTH;
 
@@ -2305,6 +2350,9 @@ bool FtpSession::listTransfer ()
 					error ("Skipping %s: %s\n", fullPath.c_str (), std::strerror (errno));
 					continue; // just skip it
 				}
+
+				if (S_ISDIR (st.st_mode))
+					st.st_mode |= S_IXUSR | S_IXGRP | S_IXOTH;
 #ifdef __3DS__
 			}
 #endif
@@ -2760,7 +2808,7 @@ void FtpSession::MKD (char const *args_)
 	}
 
 	FtpServer::updateFreeSpace ();
-	sendResponse ("250 OK\r\n");
+	sendResponse ("257 \"%s\" created\r\n", encodePath (path, true).c_str ());
 }
 
 void FtpSession::MLSD (char const *args_)
@@ -3198,6 +3246,16 @@ void FtpSession::QUIT (char const *args_)
 	(void)args_;
 
 	sendResponse ("221 Disconnecting\r\n");
+	if (m_commandSocket)
+	{
+		while (m_responseBuffer.usedSize () > 0)
+		{
+			auto const rc = m_commandSocket->write (m_responseBuffer);
+			if (rc <= 0)
+				break;
+			m_responseBuffer.coalesce ();
+		}
+	}
 	closeCommand ();
 }
 
@@ -3400,6 +3458,13 @@ void FtpSession::SITE (char const *args_)
 	if (!authorized ())
 	{
 		sendResponse ("530 Not logged in\r\n");
+		return;
+	}
+
+	if (compare (command, "CHMOD") == 0)
+	{
+		// FAT32 does not support chmod; acknowledge so clients don't complain
+		sendResponse ("200 OK\r\n");
 		return;
 	}
 
