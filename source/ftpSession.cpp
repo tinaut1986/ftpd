@@ -731,13 +731,13 @@ void FtpSession::drawConnections ()
 		ImGui::TextWrapped ("Data %s -> %s", peerName, sockName);
 	}
 
-	for (auto const &sock : m_pendingCloseSocket)
+	for (auto const &pending : m_pendingCloseSocket)
 	{
-		if (!sock)
+		if (!pending.socket)
 			continue;
 
-		sock->peerName ().name (peerName, sizeof (peerName));
-		sock->sockName ().name (sockName, sizeof (sockName));
+		pending.socket->peerName ().name (peerName, sizeof (peerName));
+		pending.socket->sockName ().name (sockName, sizeof (sockName));
 		ImGui::TextWrapped ("Closing %s -> %s", peerName, sockName);
 	}
 #endif
@@ -750,14 +750,34 @@ UniqueFtpSession FtpSession::create (FtpConfig &config_, UniqueSocket commandSoc
 
 bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 {
-	// poll for pending close sockets first
+	// expire pending close sockets older than 1 second to reclaim handles
+	auto const nowSteady = platform::steady_clock::now ();
+	for (auto &session : sessions_)
+	{
+#ifndef __NDS__
+		auto const lock = std::scoped_lock (session->m_lock);
+#endif
+		for (auto it = session->m_pendingCloseSocket.begin ();
+		     it != session->m_pendingCloseSocket.end ();)
+		{
+			if (nowSteady - it->added >= 1s)
+				it = session->m_pendingCloseSocket.erase (it);
+			else
+				++it;
+		}
+	}
+
+	// poll for pending close sockets
 	std::vector<Socket::PollInfo> pollInfo;
 	for (auto &session : sessions_)
 	{
+#ifndef __NDS__
+		auto const lock = std::scoped_lock (session->m_lock);
+#endif
 		for (auto &pending : session->m_pendingCloseSocket)
 		{
-			assert (pending.unique ());
-			pollInfo.emplace_back (*pending, POLLIN, 0);
+			assert (pending.socket.unique ());
+			pollInfo.emplace_back (*pending.socket, POLLIN, 0);
 		}
 	}
 
@@ -766,8 +786,14 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 		auto const rc = Socket::poll (pollInfo.data (), pollInfo.size (), 0ms);
 		if (rc < 0)
 		{
-			error ("poll: %s\n", std::strerror (errno));
-			return false;
+			// Non-fatal: if polling closing sockets failed, drop them all to release handles
+			for (auto &session : sessions_)
+			{
+#ifndef __NDS__
+				auto const lock = std::scoped_lock (session->m_lock);
+#endif
+				session->m_pendingCloseSocket.clear ();
+			}
 		}
 		else
 		{
@@ -778,11 +804,13 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 
 				for (auto &session : sessions_)
 				{
+#ifndef __NDS__
+					auto const lock = std::scoped_lock (session->m_lock);
+#endif
 					for (auto it = std::begin (session->m_pendingCloseSocket);
 					     it != std::end (session->m_pendingCloseSocket);)
 					{
-						auto &socket = *it;
-						if (&i.socket.get () != socket.get ())
+						if (&i.socket.get () != it->socket.get ())
 						{
 							++it;
 							continue;
@@ -849,6 +877,8 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 	auto const rc = Socket::poll (pollInfo.data (), pollInfo.size (), 100ms);
 	if (rc < 0)
 	{
+		if (errno == EINTR || errno == EAGAIN)
+			return true;
 		error ("poll: %s\n", std::strerror (errno));
 		return false;
 	}
@@ -996,10 +1026,30 @@ void FtpSession::closeSocket (SharedSocket &socket_)
 	{
 		socket_->shutdown (SHUT_WR);
 		socket_->setLinger (true, 0s);
-		LOCKED (m_pendingCloseSocket.emplace_back (std::move (socket_)));
+		{
+#ifndef __NDS__
+			auto const lock = std::scoped_lock (m_lock);
+#endif
+			// Bound pending sockets to at most 1 to avoid FD exhaustion
+			if (!m_pendingCloseSocket.empty ())
+				m_pendingCloseSocket.erase (m_pendingCloseSocket.begin ());
+
+			m_pendingCloseSocket.push_back ({std::move (socket_), platform::steady_clock::now ()});
+		}
 	}
 	else
 		LOCKED (socket_.reset ());
+}
+
+void FtpSession::clearPendingCloseSockets (std::vector<UniqueFtpSession> const &sessions_)
+{
+	for (auto const &session : sessions_)
+	{
+#ifndef __NDS__
+		auto const lock = std::scoped_lock (session->m_lock);
+#endif
+		session->m_pendingCloseSocket.clear ();
+	}
 }
 
 void FtpSession::closeCommand ()
@@ -1065,6 +1115,18 @@ bool FtpSession::dataAccept ()
 	m_pasv = false;
 
 	auto peer = m_pasvSocket->accept ();
+	if (!peer)
+	{
+		// Sockets/handles might be exhausted by pending close sockets. Reclaim and retry.
+		{
+#ifndef __NDS__
+			auto const lock = std::scoped_lock (m_lock);
+#endif
+			m_pendingCloseSocket.clear ();
+		}
+		peer = m_pasvSocket->accept ();
+	}
+
 	LOCKED (m_dataSocket = std::move (peer));
 	if (!m_dataSocket)
 	{

@@ -78,6 +78,10 @@ public:
 	/// \param sessions_ Sessions to poll
 	static bool poll (std::vector<UniqueFtpSession> const &sessions_);
 
+	/// \brief Clear pending close sockets across all sessions
+	/// \param sessions_ Sessions to clear
+	static void clearPendingCloseSockets (std::vector<UniqueFtpSession> const &sessions_);
+
 private:
 	/// \brief Command buffer size
 	constexpr static auto COMMAND_BUFFERSIZE = 4096;
@@ -266,8 +270,15 @@ private:
 	/// \brief Data socket
 	SharedSocket m_dataSocket;
 
+	/// \brief Socket pending close with creation timestamp
+	struct PendingCloseSocket
+	{
+		SharedSocket socket;
+		platform::steady_clock::time_point added;
+	};
+
 	/// \brief Sockets pending close
-	std::vector<SharedSocket> m_pendingCloseSocket;
+	std::vector<PendingCloseSocket> m_pendingCloseSocket;
 
 	/// \brief Command buffer
 	IOBuffer m_commandBuffer;

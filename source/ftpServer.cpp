@@ -228,6 +228,8 @@ FtpServer::~FtpServer ()
 	m_thread.join ();
 #endif
 
+	saveLog ();
+
 #ifndef CLASSIC
 	if (m_uploadLogCurl)
 	{
@@ -1234,6 +1236,19 @@ void FtpServer::showHelp ()
 					uploadLog ();
 				ImGui::Spacing ();
 
+				static bool s_logSavedSuccess = false;
+				static platform::steady_clock::time_point s_logSavedTime;
+				if (ImGui::Button (tr (STR_SAVE_LOG_SD), ImVec2 (-1.0f, ui::px (22.0f))))
+				{
+					s_logSavedSuccess = saveLog ();
+					s_logSavedTime    = platform::steady_clock::now ();
+				}
+				if (s_logSavedSuccess && platform::steady_clock::now () - s_logSavedTime < 3s)
+				{
+					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_LOG_SAVED));
+				}
+				ImGui::Spacing ();
+
 				ImGui::Separator ();
 				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
 				auto const &io = ImGui::GetIO ();
@@ -1514,15 +1529,17 @@ void FtpServer::loop ()
 		if (rc > 0 && (info.revents & POLLIN))
 		{
 			auto socket = m_socket->accept ();
+			if (!socket)
+			{
+				// Handles might be exhausted by pending close sockets. Reclaim and retry.
+				FtpSession::clearPendingCloseSockets (m_sessions);
+				socket = m_socket->accept ();
+			}
+
 			if (socket)
 			{
 				auto session = FtpSession::create (*m_config, std::move (socket));
 				LOCKED (m_sessions.emplace_back (std::move (session)));
-			}
-			else
-			{
-				handleNetworkLost ();
-				return;
 			}
 		}
 	}

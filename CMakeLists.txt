@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 1.1.1)
+project(ftpd VERSION 1.1.2)
 
 set(FTPD_PATCH "-EX")
 
@@ -99,6 +99,7 @@ if(NINTENDO_SWITCH OR NINTENDO_3DS OR NINTENDO_DS)
 	target_compile_definitions(${FTPD_TARGET} PRIVATE
 		NO_IPV6
 		FTPDCONFIG="/config/${PROJECT_NAME}/${PROJECT_NAME}.cfg"
+		FTPDLOG="/config/${PROJECT_NAME}/${PROJECT_NAME}.log"
 	)
 endif()
 
@@ -390,6 +391,7 @@ else()
 
 	target_compile_definitions(${FTPD_TARGET} PRIVATE
 		FTPDCONFIG="${PROJECT_NAME}.cfg"
+		FTPDLOG="${PROJECT_NAME}.log"
 	)
 
 	target_sources(${FTPD_TARGET} PRIVATE

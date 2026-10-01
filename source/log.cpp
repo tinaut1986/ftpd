@@ -28,9 +28,20 @@
 #include <imgui.h>
 #endif
 
+#include <sys/stat.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <ranges>
+#include <string>
+#include <string_view>
 #include <vector>
+
+#ifndef FTPDLOG
+#define FTPDLOG "ftpd.log"
+#endif
 
 namespace
 {
@@ -41,6 +52,39 @@ constexpr auto MAX_LOGS = 250;
 /// \brief Maximum number of log messages to keep
 constexpr auto MAX_LOGS = 10000;
 #endif
+
+bool mkdirParent (std::string_view const path_)
+{
+	auto pos = path_.find_first_of ('/');
+	while (pos != std::string::npos)
+	{
+		auto const dir = std::string (path_.substr (0, pos));
+		if (!dir.empty ())
+		{
+			struct stat st {};
+			if (::stat (dir.c_str (), &st) != 0)
+			{
+				if (::mkdir (dir.c_str (), 0777) != 0 && errno != EEXIST)
+					return false;
+			}
+		}
+		pos = path_.find_first_of ('/', pos + 1);
+	}
+	return true;
+}
+
+void appendErrorToLogFile (std::string_view const msg_)
+{
+	if (!mkdirParent (FTPDLOG))
+		return;
+
+	FILE *const fp = std::fopen (FTPDLOG, "a");
+	if (!fp)
+		return;
+
+	std::fprintf (fp, "[ERROR] %.*s", static_cast<int> (msg_.size ()), msg_.data ());
+	std::fclose (fp);
+}
 
 #ifdef CLASSIC
 bool s_logUpdated = true;
@@ -170,10 +214,11 @@ std::string getLog ()
 	std::size_t size = 0;
 	for (auto const &msg : s_messages | std::views::reverse)
 	{
-		if (size + msg.message.size () > 1024 * 1024)
+		auto const lineLen = std::strlen (s_prefix[msg.level]) + 1 + msg.message.size ();
+		if (size + lineLen > 1024 * 1024)
 			break;
 
-		size += msg.message.size ();
+		size += lineLen;
 		stack.emplace_back (&msg);
 	}
 
@@ -181,11 +226,39 @@ std::string getLog ()
 	log.reserve (size);
 
 	for (auto const &msg : stack | std::views::reverse)
+	{
+		log += s_prefix[msg->level];
+		log += ' ';
 		log += msg->message;
+	}
 
 	return log;
 }
 #endif
+
+bool saveLog (char const *const path_)
+{
+	char const *const logPath = (path_ && *path_) ? path_ : FTPDLOG;
+
+	if (!mkdirParent (logPath))
+		return false;
+
+	FILE *const fp = std::fopen (logPath, "w");
+	if (!fp)
+		return false;
+
+#ifndef __NDS__
+	auto const lock = std::scoped_lock (s_lock);
+#endif
+
+	for (auto const &msg : s_messages)
+	{
+		std::fprintf (fp, "%s %s", s_prefix[msg.level], msg.message.c_str ());
+	}
+
+	std::fclose (fp);
+	return true;
+}
 
 void debug (char const *const fmt_, ...)
 {
@@ -250,6 +323,9 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 
 	std::vsnprintf (buffer, sizeof (buffer), fmt_, ap_);
 
+	if (level_ == ERROR)
+		appendErrorToLogFile (buffer);
+
 #ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);
 #endif
@@ -277,6 +353,9 @@ void addLog (LogLevel const level_, std::string_view const message_)
 		if (c == '\0')
 			c = '?';
 	}
+
+	if (level_ == ERROR)
+		appendErrorToLogFile (msg);
 
 #ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);

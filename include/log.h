@@ -48,6 +48,11 @@ void drawLog ();
 std::string getLog ();
 #endif
 
+/// \brief Save in-memory log messages to file
+/// \param path_ Optional file path (defaults to FTPDLOG)
+/// \return true on success, false on failure
+bool saveLog (char const *path_ = nullptr);
+
 /// \brief Add debug message to bound log
 /// \param fmt_ Message format
 __attribute__ ((format (printf, 1, 2))) void debug (char const *fmt_, ...);
