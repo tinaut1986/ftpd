@@ -154,7 +154,8 @@ bool Socket::shutdown (int const how_)
 {
 	if (::shutdown (m_fd, how_) != 0)
 	{
-		error ("shutdown: %s\n", std::strerror (errno));
+		if (errno != ENOTCONN)
+			error ("shutdown: %s\n", std::strerror (errno));
 		return false;
 	}
 

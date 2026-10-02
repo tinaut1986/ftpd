@@ -1024,17 +1024,27 @@ void FtpSession::closeSocket (SharedSocket &socket_)
 {
 	if (socket_ && socket_.unique ())
 	{
-		socket_->shutdown (SHUT_WR);
-		socket_->setLinger (true, 0s);
+		if (socket_->shutdown (SHUT_WR))
 		{
+			socket_->setLinger (true, 0s);
+			{
+#ifndef __NDS__
+				auto const lock = std::scoped_lock (m_lock);
+#endif
+				// Bound pending sockets to at most 1 to avoid FD exhaustion
+				if (!m_pendingCloseSocket.empty ())
+					m_pendingCloseSocket.erase (m_pendingCloseSocket.begin ());
+
+				m_pendingCloseSocket.push_back ({std::move (socket_), platform::steady_clock::now ()});
+			}
+		}
+		else
+		{
+			// Socket was not connected or shutdown failed; close immediately
 #ifndef __NDS__
 			auto const lock = std::scoped_lock (m_lock);
 #endif
-			// Bound pending sockets to at most 1 to avoid FD exhaustion
-			if (!m_pendingCloseSocket.empty ())
-				m_pendingCloseSocket.erase (m_pendingCloseSocket.begin ());
-
-			m_pendingCloseSocket.push_back ({std::move (socket_), platform::steady_clock::now ()});
+			socket_.reset ();
 		}
 	}
 	else
