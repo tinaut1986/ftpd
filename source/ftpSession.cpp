@@ -1174,8 +1174,10 @@ bool FtpSession::dataConnect ()
 	if (!m_dataSocket)
 		return false;
 
+#ifndef __3DS__
 	m_dataSocket->setRecvBufferSize (SOCK_BUFFERSIZE);
 	m_dataSocket->setSendBufferSize (SOCK_BUFFERSIZE);
+#endif
 
 	if (!m_dataSocket->setNonBlocking ())
 		return false;
@@ -3154,9 +3156,7 @@ void FtpSession::PASV (char const *args_)
 		return;
 	}
 
-	// set the socket options
-	m_pasvSocket->setRecvBufferSize (SOCK_BUFFERSIZE);
-	m_pasvSocket->setSendBufferSize (SOCK_BUFFERSIZE);
+	m_pasvSocket->setReuseAddress (true);
 
 	// create an address to bind
 	sockaddr_in addr = m_commandSocket->sockName ();
