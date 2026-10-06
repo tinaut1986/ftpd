@@ -24,6 +24,7 @@
 
 #include "fs.h"
 #include "ftpServer.h"
+#include "i18n.h"
 #include "log.h"
 #include "ui.h"
 
@@ -85,6 +86,11 @@ bool s_backlight = true;
 
 /// \brief APT hook cookie
 aptHookCookie s_aptHookCookie;
+
+/// \brief Timestamp when HOME button was pressed and rejected
+platform::steady_clock::time_point s_homeRejectedTime;
+/// \brief Whether HOME rejected notification is active
+bool s_homeRejectedActive = false;
 
 #ifndef CLASSIC
 /// \brief Screen width
@@ -481,6 +487,77 @@ void drawStatus ()
 	ImGui::GetForegroundDrawList ()->AddText (p5, ImGui::GetColorU32 (ImGuiCol_Text), buffer);
 #endif
 }
+
+/// \brief Draw HOME button rejected notification toast
+void drawHomeNotification ()
+{
+	using namespace std::chrono_literals;
+
+	if (!s_homeRejectedActive)
+		return;
+
+	auto const elapsed = platform::steady_clock::now () - s_homeRejectedTime;
+	if (elapsed >= 3500ms)
+	{
+		s_homeRejectedActive = false;
+		return;
+	}
+
+#ifdef CLASSIC
+	consoleSelect (&g_statusConsole);
+	std::printf ("\x1b[0;0H\x1b[33;1m*** %s ***\x1b[K", tr (STR_HOME_NOT_ALLOWED));
+	std::fflush (stdout);
+#else
+	auto const text     = tr (STR_HOME_NOT_ALLOWED);
+	auto const textSize = ImGui::CalcTextSize (text);
+
+	float const padX    = 14.0f;
+	float const padY    = 8.0f;
+	float const bannerW = textSize.x + padX * 2.0f;
+	float const bannerH = textSize.y + padY * 2.0f;
+
+	// Center horizontally on bottom screen (X center is 200.0f)
+	// Bottom screen Y range is 240.0f .. 480.0f. Place it floating around Y = 360.0f
+	float const posX = 200.0f - (bannerW * 0.5f);
+	float const posY = 360.0f - (bannerH * 0.5f);
+
+	auto const pMin = ImVec2 (posX, posY);
+	auto const pMax = ImVec2 (posX + bannerW, posY + bannerH);
+
+	// Fade out smoothly during the last 1.0 second (from 2500ms to 3500ms)
+	float alpha = 1.0f;
+	if (elapsed > 2500ms)
+	{
+		auto const fadeMs =
+		    std::chrono::duration_cast<std::chrono::milliseconds> (elapsed - 2500ms).count ();
+		alpha = std::clamp (1.0f - (static_cast<float> (fadeMs) / 1000.0f), 0.0f, 1.0f);
+	}
+
+	auto const shadowAlpha = static_cast<int> (110.0f * alpha);
+	auto const bgAlpha     = static_cast<int> (240.0f * alpha);
+	auto const borderAlpha = static_cast<int> (255.0f * alpha);
+	auto const textAlpha   = static_cast<int> (255.0f * alpha);
+
+	auto drawList = ImGui::GetForegroundDrawList ();
+
+	// Drop shadow
+	drawList->AddRectFilled (ImVec2 (pMin.x + 2.0f, pMin.y + 2.0f),
+	    ImVec2 (pMax.x + 2.0f, pMax.y + 2.0f),
+	    IM_COL32 (0, 0, 0, shadowAlpha),
+	    6.0f);
+
+	// Dark semi-transparent background
+	drawList->AddRectFilled (pMin, pMax, IM_COL32 (22, 26, 34, bgAlpha), 6.0f);
+
+	// Amber / warning border
+	drawList->AddRect (pMin, pMax, IM_COL32 (245, 175, 45, borderAlpha), 6.0f, 0, 1.5f);
+
+	// Centered text
+	drawList->AddText (ImVec2 (posX + padX, posY + padY),
+	    IM_COL32 (255, 255, 255, textAlpha),
+	    text);
+#endif
+}
 }
 
 bool platform::init ()
@@ -517,6 +594,7 @@ bool platform::init ()
 #endif
 
 	aptHook (&s_aptHookCookie, handleAPTHook, nullptr);
+	aptSetHomeAllowed (false);
 
 #ifndef CLASSIC
 	// initialize citro3d
@@ -628,6 +706,13 @@ bool platform::loop ()
 	if (!aptMainLoop ())
 		return false;
 
+	if (aptCheckHomePressRejected ())
+	{
+		s_homeRejectedTime   = platform::steady_clock::now ();
+		s_homeRejectedActive = true;
+		info ("HOME pressed: %s\n", tr (STR_HOME_NOT_ALLOWED));
+	}
+
 	startNetwork ();
 
 	hidScanInput ();
@@ -663,6 +748,7 @@ void platform::render ()
 	drawLogo ();
 	drawBubbles ();
 	drawStatus ();
+	drawHomeNotification ();
 
 #ifdef CLASSIC
 	gfxFlushBuffers ();
@@ -716,6 +802,7 @@ void platform::exit ()
 
 	std::free (s_socuBuffer);
 
+	aptSetHomeAllowed (true);
 	aptUnhook (&s_aptHookCookie);
 
 	// turn backlight back on
