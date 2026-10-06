@@ -85,6 +85,7 @@ char const *const s_strings[static_cast<std::size_t> (Language::Count)][STR_COUN
         [STR_SECTION_CONNECTIONS]   = "Active Connections",
         [STR_SECTION_LICENSES]      = "Component Licenses",
         [STR_NO_ACTIVE_SESSIONS]    = "No active connections",
+        [STR_HOME_NOT_ALLOWED]      = "Press START to exit",
     },
     // Spanish
     [static_cast<std::size_t> (Language::Spanish)] = {
@@ -162,6 +163,7 @@ char const *const s_strings[static_cast<std::size_t> (Language::Count)][STR_COUN
         [STR_SECTION_CONNECTIONS]   = "Conexiones activas",
         [STR_SECTION_LICENSES]      = "Licencias de componentes",
         [STR_NO_ACTIVE_SESSIONS]    = "Sin conexiónes activas",
+        [STR_HOME_NOT_ALLOWED]      = "Pulsa START para salir",
     },
 };
 }
