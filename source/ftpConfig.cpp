@@ -201,6 +201,19 @@ UniqueFtpConfig FtpConfig::load (gsl::not_null<gsl::czstring> const path_)
 		else if (key == "passphrase")
 			config->m_passphrase = val;
 #endif
+#ifndef CLASSIC
+		else if (key == "checkUpdates")
+		{
+			if (val == "0")
+				config->m_checkUpdates = false;
+			else if (val == "1")
+				config->m_checkUpdates = true;
+			else
+				error ("Invalid value for checkUpdates: %.*s\n",
+				    gsl::narrow_cast<int> (val.size ()),
+				    val.data ());
+		}
+#endif
 	}
 
 	config->setPort (port);
@@ -234,6 +247,10 @@ bool FtpConfig::save (gsl::not_null<gsl::czstring> const path_)
 	(void)std::fprintf (fp, "port=%u\n", m_port);
 	(void)std::fprintf (fp, "deflateLevel=%u\n", m_deflateLevel);
 	(void)std::fprintf (fp, "lang=%s\n", m_language == Language::Spanish ? "es" : "en");
+
+#ifndef CLASSIC
+	(void)std::fprintf (fp, "checkUpdates=%u\n", m_checkUpdates);
+#endif
 
 #ifdef __3DS__
 	(void)std::fprintf (fp, "mtime=%u\n", m_getMTime);
@@ -395,5 +412,17 @@ void FtpConfig::setSSID (std::string_view const ssid_)
 void FtpConfig::setPassphrase (std::string_view const passphrase_)
 {
 	m_passphrase = passphrase_.substr (0, passphrase_.find_first_of ('\0'));
+}
+#endif
+
+#ifndef CLASSIC
+bool FtpConfig::checkUpdates () const
+{
+	return m_checkUpdates;
+}
+
+void FtpConfig::setCheckUpdates (bool const checkUpdates_)
+{
+	m_checkUpdates = checkUpdates_;
 }
 #endif

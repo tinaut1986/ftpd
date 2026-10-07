@@ -144,6 +144,15 @@ public:
 	void setPassphrase (std::string_view passphrase_);
 #endif
 
+#ifndef CLASSIC
+	/// \brief Get whether to check for updates on launch
+	bool checkUpdates () const;
+
+	/// \brief Set whether to check for updates on launch
+	/// \param checkUpdates_ Whether to check for updates
+	void setCheckUpdates (bool checkUpdates_);
+#endif
+
 private:
 	FtpConfig ();
 
@@ -169,6 +178,11 @@ private:
 
 	/// \brief Language
 	Language m_language = Language::English;
+
+#ifndef CLASSIC
+	/// \brief Whether to check for updates on launch
+	bool m_checkUpdates = true;
+#endif
 
 #ifdef __3DS__
 	/// \brief Whether to get mtime

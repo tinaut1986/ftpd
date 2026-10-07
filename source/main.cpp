@@ -28,17 +28,22 @@
 #include <imgui.h>
 
 #include <curl/curl.h>
+#include "updater.h"
 #endif
 
 #include <cstdio>
 #include <cstdlib>
 
-int main ()
+int main (int argc, char *argv[])
 {
 #ifndef CLASSIC
 	curl_global_init (CURL_GLOBAL_ALL);
+	updater::init (argc > 0 && argv && argv[0] ? argv[0] : nullptr, false);
 	IMGUI_CHECKVERSION ();
 	ImGui::CreateContext ();
+#else
+	(void)argc;
+	(void)argv;
 #endif
 
 	if (!platform::init ())
