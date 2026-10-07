@@ -48,6 +48,8 @@
 #ifndef CLASSIC
 #include <imgui.h>
 
+#include "updater.h"
+
 #include <jansson.h>
 
 #include <curl/easy.h>
@@ -247,13 +249,20 @@ FtpServer::FtpServer (UniqueFtpConfig config_)
     : m_config (std::move (config_))
 #ifndef CLASSIC
       ,
-      m_hostnameSetting (m_config->hostname ())
+      m_hostnameSetting (m_config->hostname ()),
+      m_checkUpdatesSetting (m_config->checkUpdates ())
 #endif
 {
 #ifndef __NDS__
 	mdns::setHostname (m_config->hostname ());
 
 	m_thread = platform::Thread (std::bind (&FtpServer::threadFunc, this));
+#endif
+
+#ifndef CLASSIC
+	updater::setAutoCheck (m_config->checkUpdates ());
+	if (m_config->checkUpdates () && platform::networkVisible ())
+		updater::checkNow ();
 #endif
 
 #ifdef __3DS__
@@ -602,6 +611,10 @@ void FtpServer::draw ()
 
 bool FtpServer::quit ()
 {
+#ifndef CLASSIC
+	if (updater::isRestartRequested ())
+		return true;
+#endif
 	return m_quit;
 }
 
@@ -700,6 +713,11 @@ void FtpServer::handleNetworkFound ()
 		return;
 
 	LOCKED (m_mdnsSocket = std::move (socket));
+#endif
+
+#ifndef CLASSIC
+	if (m_config->checkUpdates () && updater::getState () == updater::State::Idle)
+		updater::checkNow ();
 #endif
 }
 
@@ -870,6 +888,8 @@ void FtpServer::showMenu ()
 		m_showSettings         = false;
 		m_showHelp             = false;
 		m_showAbout            = false;
+		m_showWhatsNew         = false;
+		updater::dismissPrompt ();
 		ImGui::CloseCurrentPopup ();
 	}
 
@@ -879,6 +899,7 @@ void FtpServer::showMenu ()
 		m_showSettings          = true;
 		m_showHelp              = false;
 		m_showAbout             = false;
+		m_showWhatsNew          = false;
 
 #ifndef __NDS__
 		auto const lock = m_config->lockGuard ();
@@ -897,6 +918,8 @@ void FtpServer::showMenu ()
 		m_portSetting = m_config->port ();
 
 		m_deflateLevelSetting = m_config->deflateLevel ();
+
+		m_checkUpdatesSetting = m_config->checkUpdates ();
 
 #ifdef __3DS__
 		m_getMTimeSetting = m_config->getMTime ();
@@ -922,6 +945,7 @@ void FtpServer::showMenu ()
 		m_showHelp          = true;
 		m_showSettings      = false;
 		m_showAbout         = false;
+		m_showWhatsNew      = false;
 
 		auto const title = std::string (tr (STR_HELP_TITLE)) + "###Help";
 		ImGui::OpenPopup (title.c_str ());
@@ -932,6 +956,12 @@ void FtpServer::showMenu ()
 
 	if (m_showHelp)
 		showHelp ();
+
+	if (m_showWhatsNew)
+		showWhatsNew ();
+
+	if (updater::getPrompt () != updater::Prompt::None)
+		showUpdaterPrompt ();
 }
 
 void FtpServer::showSettings ()
@@ -1028,6 +1058,8 @@ void FtpServer::showSettings ()
 		ImGui::SliderInt (
 		    tr (STR_DEFLATE_LEVEL), &m_deflateLevelSetting, Z_NO_COMPRESSION, Z_BEST_COMPRESSION);
 
+		ImGui::Checkbox (tr (STR_CHECK_UPDATES), &m_checkUpdatesSetting);
+
 #ifdef __3DS__
 		ImGui::Checkbox (tr (STR_GET_MTIME), &m_getMTimeSetting);
 #endif
@@ -1077,6 +1109,8 @@ void FtpServer::showSettings ()
 			m_config->setHostname (m_hostnameSetting);
 			m_config->setPort (m_portSetting);
 			m_config->setDeflateLevel (m_deflateLevelSetting);
+			m_config->setCheckUpdates (m_checkUpdatesSetting);
+			updater::setAutoCheck (m_checkUpdatesSetting);
 
 #ifdef __3DS__
 			m_config->setGetMTime (m_getMTimeSetting);
@@ -1102,12 +1136,13 @@ void FtpServer::showSettings ()
 		{
 			static auto const defaults = FtpConfig::create ();
 
-			m_langSetting     = defaults->language ();
+			m_langSetting         = defaults->language ();
 			i18n::setLanguage (m_langSetting);
-			m_userSetting     = defaults->user ();
-			m_passSetting     = defaults->pass ();
-			m_hostnameSetting = defaults->hostname ();
-			m_portSetting     = defaults->port ();
+			m_userSetting         = defaults->user ();
+			m_passSetting         = defaults->pass ();
+			m_hostnameSetting     = defaults->hostname ();
+			m_portSetting         = defaults->port ();
+			m_checkUpdatesSetting = defaults->checkUpdates ();
 #ifdef __3DS__
 			m_getMTimeSetting = defaults->getMTime ();
 #endif
@@ -1266,6 +1301,72 @@ void FtpServer::showHelp ()
 				ImGui::Spacing ();
 
 				ImGui::Separator ();
+				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+				auto const updState = updater::getState ();
+				switch (updState)
+				{
+				case updater::State::Idle:
+				case updater::State::UpToDate:
+					ImGui::TextDisabled ("%s", tr (STR_UPDATES_UP_TO_DATE));
+					break;
+				case updater::State::Checking:
+					ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_CHECKING));
+					break;
+				case updater::State::Available:
+				{
+					char buf[64];
+					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
+					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", buf);
+					break;
+				}
+				case updater::State::Downloading:
+					ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), tr (STR_UPDATES_DOWNLOADING), updater::getProgress ());
+					ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-1.0f, ui::px (14.0f)));
+					break;
+				case updater::State::Installing:
+					ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_INSTALLING));
+					ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-1.0f, ui::px (14.0f)));
+					break;
+				case updater::State::Installed:
+					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_UPDATES_RESTART_PROMPT));
+					break;
+				case updater::State::Error:
+				{
+					char buf[96];
+					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_ERROR), updater::getMessage ().c_str ());
+					ImGui::TextColored (ImVec4 (0.95f, 0.35f, 0.35f, 1.0f), "%s", buf);
+					break;
+				}
+				}
+				ImGui::Spacing ();
+
+				if (updState == updater::State::Available)
+				{
+					if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (-1.0f, ui::px (22.0f))))
+						updater::install ();
+					ImGui::Spacing ();
+				}
+				else if (updState == updater::State::Installed)
+				{
+					if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (-1.0f, ui::px (22.0f))))
+						updater::restart ();
+					ImGui::Spacing ();
+				}
+				else if (!updater::isBusy ())
+				{
+					if (ImGui::Button (tr (STR_CHECK_FOR_UPDATES_BTN), ImVec2 (-1.0f, ui::px (22.0f))))
+						updater::checkNow ();
+					ImGui::Spacing ();
+				}
+
+				if (updater::hasNotes ())
+				{
+					if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (-1.0f, ui::px (22.0f))))
+						m_showWhatsNew = true;
+					ImGui::Spacing ();
+				}
+
+				ImGui::Separator ();
 				if (ImGui::TreeNode (tr (STR_SECTION_CONNECTIONS)))
 				{
 					if (m_sessions.empty ())
@@ -1381,6 +1482,239 @@ void FtpServer::showHelp ()
 void FtpServer::showAbout ()
 {
 	openAbout ();
+}
+
+void FtpServer::showWhatsNew ()
+{
+#ifdef __3DS__
+	ImGui::SetNextWindowSize (ImVec2 (304.0f, 224.0f));
+	ImGui::SetNextWindowPos (ImVec2 (48.0f, 248.0f));
+#else
+	auto const &io    = ImGui::GetIO ();
+	auto const width  = io.DisplaySize.x;
+	auto const height = io.DisplaySize.y;
+
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.85f, height * 0.85f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.075f, height * 0.075f));
+#endif
+
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
+	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
+
+	std::string const title = std::string (tr (STR_UPDATES_WHATS_NEW)) + "###WhatsNew";
+	ImGui::OpenPopup (title.c_str ());
+
+	bool const open = ImGui::BeginPopupModal (title.c_str (),
+	        nullptr,
+	        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+	ImGui::PopStyleColor ();
+	ImGui::PopStyleVar (2);
+
+	if (open)
+	{
+		ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_WHATS_NEW));
+		ImGui::SameLine ();
+		float const closeBtnWidth = ui::px (26.0f);
+		ImGui::SetCursorPosX (ImGui::GetWindowWidth () - closeBtnWidth - ui::px (8.0f));
+		ImGui::SetCursorPosY (ImGui::GetCursorPosY () - ui::px (2.0f));
+
+		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.75f, 0.20f, 0.20f, 0.85f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.90f, 0.28f, 0.28f, 1.00f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.95f, 0.35f, 0.35f, 1.00f));
+		bool const closeClicked = ImGui::Button ("X", ImVec2 (closeBtnWidth, ui::px (18.0f)));
+		ImGui::PopStyleColor (3);
+
+		if (closeClicked)
+		{
+			m_showWhatsNew = false;
+			ImGui::CloseCurrentPopup ();
+			ImGui::EndPopup ();
+			return;
+		}
+
+		ImGui::Separator ();
+		ImGui::Spacing ();
+
+		auto const notes = updater::getNotes ();
+		ImGui::BeginChild ("NotesScroll", ImVec2 (0.0f, ImGui::GetContentRegionAvail ().y - ui::px (28.0f)), true);
+		if (notes.empty ())
+		{
+			ImGui::TextDisabled ("%s", tr (STR_UPDATES_NO_NOTES));
+		}
+		else
+		{
+			std::string_view remaining (notes);
+			while (!remaining.empty ())
+			{
+				auto const pos = remaining.find ('\n');
+				auto const line = (pos == std::string_view::npos) ? remaining : remaining.substr (0, pos);
+				remaining       = (pos == std::string_view::npos) ? std::string_view () : remaining.substr (pos + 1);
+
+				if (line.starts_with ("== "))
+				{
+					ImGui::Spacing ();
+					ImGui::TextColored (ImVec4 (1.0f, 0.85f, 0.20f, 1.0f), "%.*s", static_cast<int> (line.size ()), line.data ());
+				}
+				else if (!line.empty ())
+				{
+					ImGui::TextWrapped ("%.*s", static_cast<int> (line.size ()), line.data ());
+				}
+			}
+		}
+		ImGui::EndChild ();
+
+		if (ImGui::Button (tr (STR_UPDATES_CLOSE), ImVec2 (-1.0f, ui::px (22.0f))))
+		{
+			m_showWhatsNew = false;
+			ImGui::CloseCurrentPopup ();
+		}
+
+		ImGui::EndPopup ();
+	}
+	else
+	{
+		m_showWhatsNew = false;
+	}
+}
+
+void FtpServer::showUpdaterPrompt ()
+{
+	auto const prompt = updater::getPrompt ();
+	if (prompt == updater::Prompt::None)
+		return;
+
+#ifdef __3DS__
+	ImGui::SetNextWindowSize (ImVec2 (304.0f, 180.0f));
+	ImGui::SetNextWindowPos (ImVec2 (48.0f, 270.0f));
+#else
+	auto const &io    = ImGui::GetIO ();
+	auto const width  = io.DisplaySize.x;
+	auto const height = io.DisplaySize.y;
+
+	ImGui::SetNextWindowSize (ImVec2 (width * 0.65f, height * 0.40f));
+	ImGui::SetNextWindowPos (ImVec2 (width * 0.175f, height * 0.30f));
+#endif
+
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowBorderSize, 1.5f);
+	ImGui::PushStyleVar (ImGuiStyleVar_WindowRounding, 6.0f);
+	ImGui::PushStyleColor (ImGuiCol_Border, ImVec4 (0.35f, 0.65f, 0.95f, 0.90f));
+
+	char const *popupId = "UpdaterPromptModal###Prompt";
+	ImGui::OpenPopup (popupId);
+
+	bool const open = ImGui::BeginPopupModal (popupId,
+	        nullptr,
+	        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+	ImGui::PopStyleColor ();
+	ImGui::PopStyleVar (2);
+
+	if (open)
+	{
+		switch (prompt)
+		{
+		case updater::Prompt::AskInstall:
+		{
+			ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+			ImGui::Separator ();
+			ImGui::Spacing ();
+
+			char buf[64];
+			std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
+			ImGui::TextWrapped ("%s", buf);
+			ImGui::Spacing ();
+
+			auto const &style = ImGui::GetStyle ();
+			float const btnWidth = (ImGui::GetContentRegionAvail ().x - style.ItemSpacing.x * 2.0f) / 3.0f;
+
+			if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (btnWidth, ui::px (22.0f))))
+			{
+				updater::answerPrompt (true);
+				ImGui::CloseCurrentPopup ();
+			}
+			ImGui::SameLine ();
+			if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (btnWidth, ui::px (22.0f))))
+			{
+				m_showWhatsNew = true;
+			}
+			ImGui::SameLine ();
+			if (ImGui::Button (tr (STR_UPDATES_LATER), ImVec2 (btnWidth, ui::px (22.0f))))
+			{
+				updater::answerPrompt (false);
+				ImGui::CloseCurrentPopup ();
+			}
+			break;
+		}
+		case updater::Prompt::Progress:
+		{
+			ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+			ImGui::Separator ();
+			ImGui::Spacing ();
+
+			auto const state = updater::getState ();
+			if (state == updater::State::Downloading)
+			{
+				ImGui::Text (tr (STR_UPDATES_DOWNLOADING), updater::getProgress ());
+			}
+			else
+			{
+				ImGui::Text ("%s", tr (STR_UPDATES_INSTALLING));
+			}
+			ImGui::Spacing ();
+			ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-1.0f, ui::px (16.0f)));
+			break;
+		}
+		case updater::Prompt::AskRestart:
+		{
+			ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+			ImGui::Separator ();
+			ImGui::Spacing ();
+
+			ImGui::TextWrapped ("%s", tr (STR_UPDATES_RESTART_PROMPT));
+			ImGui::Spacing ();
+
+			auto const &style = ImGui::GetStyle ();
+			float const btnWidth = (ImGui::GetContentRegionAvail ().x - style.ItemSpacing.x) * 0.5f;
+
+			if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (btnWidth, ui::px (22.0f))))
+			{
+				updater::answerPrompt (true);
+				ImGui::CloseCurrentPopup ();
+			}
+			ImGui::SameLine ();
+			if (ImGui::Button (tr (STR_UPDATES_LATER), ImVec2 (btnWidth, ui::px (22.0f))))
+			{
+				updater::answerPrompt (false);
+				ImGui::CloseCurrentPopup ();
+			}
+			break;
+		}
+		case updater::Prompt::Error:
+		{
+			ImGui::TextColored (ImVec4 (0.95f, 0.35f, 0.35f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+			ImGui::Separator ();
+			ImGui::Spacing ();
+
+			char buf[96];
+			std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_ERROR), updater::getMessage ().c_str ());
+			ImGui::TextWrapped ("%s", buf);
+			ImGui::Spacing ();
+
+			if (ImGui::Button (tr (STR_BTN_OK), ImVec2 (-1.0f, ui::px (22.0f))))
+			{
+				updater::answerPrompt (false);
+				ImGui::CloseCurrentPopup ();
+			}
+			break;
+		}
+		default:
+			break;
+		}
+
+		ImGui::EndPopup ();
+	}
 }
 
 void FtpServer::uploadLog ()

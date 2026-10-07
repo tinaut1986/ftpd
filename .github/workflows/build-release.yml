@@ -149,6 +149,16 @@ jobs:
               echo "> into \`master\` yet, so it is not a stable version."
               echo
             fi
+            NOTES_FILE="docs/release-notes/${TAG}.md"
+            if [ -f "$NOTES_FILE" ]; then
+              echo "<!-- ftpd-notes -->"
+              echo "## What's new"
+              echo
+              cat "$NOTES_FILE"
+              echo
+              echo "<!-- /ftpd-notes -->"
+              echo
+            fi
             echo "## Nintendo 3DS"
             echo
             echo "### ftpd-EX"

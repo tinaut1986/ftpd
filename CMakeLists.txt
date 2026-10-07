@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 1.2.1)
+project(ftpd VERSION 1.3.0)
 
 set(FTPD_PATCH "-EX")
 
@@ -139,8 +139,10 @@ if(NOT FTPD_CLASSIC AND NOT NINTENDO_DS)
 	target_sources(${FTPD_TARGET} PRIVATE
 		include/licenses.h
 		include/ui.h
+		include/updater.h
 		source/licenses.cpp
 		source/ui.cpp
+		source/updater.cpp
 
 		${IMGUI_SOURCE_DIR}/imconfig.h
 		${IMGUI_SOURCE_DIR}/imgui.h

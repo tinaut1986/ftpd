@@ -97,6 +97,12 @@ private:
 	/// \brief Show about window
 	void showAbout ();
 
+	/// \brief Show What's New window
+	void showWhatsNew ();
+
+	/// \brief Show updater prompt modal
+	void showUpdaterPrompt ();
+
 	/// \brief Open settings modal
 	void openSettings ();
 
@@ -179,6 +185,9 @@ private:
 	/// \brief Whether to show about window
 	bool m_showAbout = false;
 
+	/// \brief Whether to show What's New window
+	bool m_showWhatsNew = false;
+
 	/// \brief Modal request triggers
 	bool m_openSettingsRequested = false;
 	bool m_openHelpRequested     = false;
@@ -202,6 +211,9 @@ private:
 
 	/// \brief Deflate level setting
 	int m_deflateLevelSetting = Z_NO_COMPRESSION;
+
+	/// \brief Check updates setting
+	bool m_checkUpdatesSetting = true;
 
 #ifdef __3DS__
 	/// \brief getMTime setting
