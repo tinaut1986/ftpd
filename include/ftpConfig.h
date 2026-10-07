@@ -151,7 +151,15 @@ public:
 	/// \brief Set whether to check for updates on launch
 	/// \param checkUpdates_ Whether to check for updates
 	void setCheckUpdates (bool checkUpdates_);
+
+	/// \brief Get whether to check beta channel
+	bool updateBeta () const;
+
+	/// \brief Set whether to check beta channel
+	/// \param updateBeta_ Whether to check beta channel
+	void setUpdateBeta (bool updateBeta_);
 #endif
+
 
 private:
 	FtpConfig ();
@@ -182,6 +190,9 @@ private:
 #ifndef CLASSIC
 	/// \brief Whether to check for updates on launch
 	bool m_checkUpdates = true;
+
+	/// \brief Whether to check beta channel
+	bool m_updateBeta = false;
 #endif
 
 #ifdef __3DS__

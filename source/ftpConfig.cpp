@@ -213,6 +213,17 @@ UniqueFtpConfig FtpConfig::load (gsl::not_null<gsl::czstring> const path_)
 				    gsl::narrow_cast<int> (val.size ()),
 				    val.data ());
 		}
+		else if (key == "updateBeta")
+		{
+			if (val == "0")
+				config->m_updateBeta = false;
+			else if (val == "1")
+				config->m_updateBeta = true;
+			else
+				error ("Invalid value for updateBeta: %.*s\n",
+				    gsl::narrow_cast<int> (val.size ()),
+				    val.data ());
+		}
 #endif
 	}
 
@@ -250,6 +261,7 @@ bool FtpConfig::save (gsl::not_null<gsl::czstring> const path_)
 
 #ifndef CLASSIC
 	(void)std::fprintf (fp, "checkUpdates=%u\n", m_checkUpdates);
+	(void)std::fprintf (fp, "updateBeta=%u\n", m_updateBeta);
 #endif
 
 #ifdef __3DS__
@@ -424,5 +436,15 @@ bool FtpConfig::checkUpdates () const
 void FtpConfig::setCheckUpdates (bool const checkUpdates_)
 {
 	m_checkUpdates = checkUpdates_;
+}
+
+bool FtpConfig::updateBeta () const
+{
+	return m_updateBeta;
+}
+
+void FtpConfig::setUpdateBeta (bool const updateBeta_)
+{
+	m_updateBeta = updateBeta_;
 }
 #endif

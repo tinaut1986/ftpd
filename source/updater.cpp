@@ -33,8 +33,14 @@ namespace
 {
 
 #ifndef FTPD_VERSION_STRING
-#define FTPD_VERSION_STRING "v1.3.0-EX"
+#define FTPD_VERSION_STRING "v1.3.1-EX"
 #endif
+
+#ifndef FTPD_IS_BETA
+#define FTPD_IS_BETA 0
+#endif
+
+constexpr bool kIsBetaBuild = (FTPD_IS_BETA != 0);
 
 constexpr auto UPDATER_DEFAULT_URL = "https://api.github.com/repos/tinaut1986/ftpd/releases?per_page=8";
 constexpr auto UPDATER_JSON_MAX    = 192 * 1024;
@@ -69,7 +75,7 @@ std::atomic<bool> s_busy {false};
 std::atomic<bool> s_restartRequested {false};
 
 bool s_autoCheck = true;
-bool s_beta      = false;
+bool s_beta      = kIsBetaBuild;
 
 std::string s_targetPath;
 ReleaseInfo s_currentRelease;
@@ -801,16 +807,17 @@ bool doCheck ()
 
 	auto const targetType = getTargetAssetType ();
 	ReleaseInfo rel;
-	if (!pickRelease (jsonBuf.data.c_str (), s_beta, targetType, rel))
+	bool const allowBeta = s_beta || kIsBetaBuild;
+	if (!pickRelease (jsonBuf.data.c_str (), allowBeta, targetType, rel))
 	{
 		fail ("No compatible release found");
 		return false;
 	}
 
 	std::string notes;
-	if (collectNotes (jsonBuf.data.c_str (), s_beta, FTPD_VERSION_STRING, false, notes) == 0)
+	if (collectNotes (jsonBuf.data.c_str (), allowBeta, FTPD_VERSION_STRING, kIsBetaBuild, notes) == 0)
 	{
-		collectNotes (jsonBuf.data.c_str (), s_beta, "v0.0.0", false, notes);
+		collectNotes (jsonBuf.data.c_str (), allowBeta, "v0.0.0", false, notes);
 	}
 
 	{
@@ -820,7 +827,7 @@ bool doCheck ()
 		s_currentRelease = rel;
 	}
 
-	if (!isNewerBuild (FTPD_VERSION_STRING, false, rel.tag, rel.prerelease))
+	if (!isNewerBuild (FTPD_VERSION_STRING, kIsBetaBuild, rel.tag, rel.prerelease))
 	{
 		s_state = updater::State::UpToDate;
 		return false;
@@ -978,12 +985,22 @@ void init (char const *argv0_, bool autoCheck_)
 
 	s_autoCheck = autoCheck_;
 	if (s_autoCheck && platform::networkVisible ())
-		checkNow ();
+		checkAuto ();
 }
 
 void checkNow ()
 {
 	startJob (false, false);
+}
+
+void checkAuto ()
+{
+	startJob (true, false);
+}
+
+bool isBetaBuild ()
+{
+	return kIsBetaBuild;
 }
 
 void install ()

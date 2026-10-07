@@ -261,8 +261,9 @@ FtpServer::FtpServer (UniqueFtpConfig config_)
 
 #ifndef CLASSIC
 	updater::setAutoCheck (m_config->checkUpdates ());
+	updater::setBeta (m_config->updateBeta ());
 	if (m_config->checkUpdates () && platform::networkVisible ())
-		updater::checkNow ();
+		updater::checkAuto ();
 #endif
 
 #ifdef __3DS__
@@ -399,7 +400,7 @@ void FtpServer::draw ()
 			ImGui::SameLine ();
 			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
 
-			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_STRING,
+			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_LABEL,
 			    m_sessions.size (),
 			    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
 		}
@@ -501,7 +502,7 @@ void FtpServer::draw ()
 			ImGui::TextColored (ImVec4 (0.2f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_ONLINE));
 			ImGui::SameLine ();
 			ImGui::TextColored (ImVec4 (1.0f, 1.0f, 1.0f, 1.0f), "ftp://%s", m_name.c_str ());
-			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_STRING,
+			ImGui::TextDisabled ("%zu %s  •  " FTPD_VERSION_LABEL,
 			    m_sessions.size (),
 			    m_sessions.size () == 1 ? tr (STR_SESSION_SINGLE) : tr (STR_SESSIONS_PLURAL));
 		}
@@ -716,8 +717,10 @@ void FtpServer::handleNetworkFound ()
 #endif
 
 #ifndef CLASSIC
+	updater::setAutoCheck (m_config->checkUpdates ());
+	updater::setBeta (m_config->updateBeta ());
 	if (m_config->checkUpdates () && updater::getState () == updater::State::Idle)
-		updater::checkNow ();
+		updater::checkAuto ();
 #endif
 }
 
@@ -960,7 +963,7 @@ void FtpServer::showMenu ()
 	if (m_showWhatsNew)
 		showWhatsNew ();
 
-	if (updater::getPrompt () != updater::Prompt::None)
+	if (!m_showWhatsNew && !m_showSettings && updater::getPrompt () != updater::Prompt::None)
 		showUpdaterPrompt ();
 }
 
@@ -1259,21 +1262,21 @@ void FtpServer::showHelp ()
 			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT), nullptr, m_helpSelectedTab == 2 ? ImGuiTabItemFlags_SetSelected : 0))
 			{
 				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, 0.0f), false);
-				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX " FTPD_VERSION_STRING);
+				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX " FTPD_VERSION_LABEL);
 				ImGui::TextDisabled ("based on ftpd v" FTPD_UPSTREAM_VERSION);
-				ImGui::Spacing ();
-				ImGui::TextWrapped ("%s", tr (STR_ABOUT_DESC));
 				ImGui::Spacing ();
 				ImGui::TextWrapped ("%s", tr (STR_ABOUT_CREDITS));
 				ImGui::Spacing ();
 
-				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (-1.0f, ui::px (22.0f))))
+				float const halfWidth = (ImGui::GetContentRegionAvail ().x - ImGui::GetStyle ().ItemSpacing.x) * 0.5f;
+
+				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (halfWidth, ui::px (22.0f))))
 					uploadLog ();
-				ImGui::Spacing ();
+				ImGui::SameLine ();
 
 				static bool s_logSavedSuccess = false;
 				static platform::steady_clock::time_point s_logSavedTime;
-				if (ImGui::Button (tr (STR_SAVE_LOG_SD), ImVec2 (-1.0f, ui::px (22.0f))))
+				if (ImGui::Button (tr (STR_SAVE_LOG_SD), ImVec2 (halfWidth, ui::px (22.0f))))
 				{
 					s_logSavedSuccess = saveLog ();
 					s_logSavedTime    = platform::steady_clock::now ();
@@ -1282,22 +1285,6 @@ void FtpServer::showHelp ()
 				{
 					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_LOG_SAVED));
 				}
-				ImGui::Spacing ();
-
-				ImGui::Separator ();
-				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_SYS_INFO_TITLE));
-				auto const &io = ImGui::GetIO ();
-				bulletWrapped ("%s: %s", tr (STR_LABEL_PLATFORM), io.BackendPlatformName);
-				bulletWrapped ("%s: %s", tr (STR_LABEL_RENDERER), io.BackendRendererName);
-
-#ifdef __3DS__
-				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_CMD_BUF), 100.0f * C3D_GetCmdBufUsage ());
-				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_GPU_DRAW), 6.0f * C3D_GetDrawingTime ());
-				bulletWrapped ("%s: %.1f%%", tr (STR_LABEL_GPU_PROC), 6.0f * C3D_GetProcessingTime ());
-				ImGui::PushTextWrapPos (0.0f);
-				ImGui::TextDisabled ("  (%s)", tr (STR_GPU_PROC_NOTE));
-				ImGui::PopTextWrapPos ();
-#endif
 				ImGui::Spacing ();
 
 				ImGui::Separator ();
@@ -1340,44 +1327,51 @@ void FtpServer::showHelp ()
 				}
 				ImGui::Spacing ();
 
+				// Row 1: Action button + Novedades
 				if (updState == updater::State::Available)
 				{
-					if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (-1.0f, ui::px (22.0f))))
+					if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (halfWidth, ui::px (22.0f))))
 						updater::install ();
-					ImGui::Spacing ();
 				}
 				else if (updState == updater::State::Installed)
 				{
-					if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (-1.0f, ui::px (22.0f))))
+					if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (halfWidth, ui::px (22.0f))))
 						updater::restart ();
-					ImGui::Spacing ();
 				}
-				else if (!updater::isBusy ())
+				else
 				{
-					if (ImGui::Button (tr (STR_CHECK_FOR_UPDATES_BTN), ImVec2 (-1.0f, ui::px (22.0f))))
+					ImGui::BeginDisabled (updater::isBusy ());
+					if (ImGui::Button (tr (STR_CHECK_FOR_UPDATES_BTN), ImVec2 (halfWidth, ui::px (22.0f))))
 						updater::checkNow ();
-					ImGui::Spacing ();
+					ImGui::EndDisabled ();
 				}
 
-				if (updater::hasNotes ())
+				ImGui::SameLine ();
+				ImGui::BeginDisabled (!updater::hasNotes ());
+				if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (halfWidth, ui::px (22.0f))))
+					m_showWhatsNew = true;
+				ImGui::EndDisabled ();
+				ImGui::Spacing ();
+
+				// Row 2: Autoactualizar + Canal
+				bool autoCheck = m_config->checkUpdates ();
+				if (ImGui::Button (autoCheck ? tr (STR_UPDATES_AUTO_ON) : tr (STR_UPDATES_AUTO_OFF), ImVec2 (halfWidth, ui::px (22.0f))))
 				{
-					if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (-1.0f, ui::px (22.0f))))
-						m_showWhatsNew = true;
-					ImGui::Spacing ();
+					autoCheck = !autoCheck;
+					m_config->setCheckUpdates (autoCheck);
+					m_checkUpdatesSetting = autoCheck;
+					updater::setAutoCheck (autoCheck);
 				}
 
-				ImGui::Separator ();
-				if (ImGui::TreeNode (tr (STR_SECTION_CONNECTIONS)))
+				ImGui::SameLine ();
+				bool beta = m_config->updateBeta ();
+				if (ImGui::Button (beta ? tr (STR_UPDATES_CHANNEL_BETA) : tr (STR_UPDATES_CHANNEL_STABLE), ImVec2 (halfWidth, ui::px (22.0f))))
 				{
-					if (m_sessions.empty ())
-						ImGui::TextDisabled ("%s", tr (STR_NO_ACTIVE_SESSIONS));
-					else
-					{
-						for (auto const &session : m_sessions)
-							session->drawConnections ();
-					}
-					ImGui::TreePop ();
+					beta = !beta;
+					m_config->setUpdateBeta (beta);
+					updater::setBeta (beta);
 				}
+				ImGui::Spacing ();
 
 				ImGui::Separator ();
 				if (ImGui::TreeNode (tr (STR_SECTION_LICENSES)))
@@ -1624,26 +1618,35 @@ void FtpServer::showUpdaterPrompt ()
 			char buf[64];
 			std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
 			ImGui::TextWrapped ("%s", buf);
+			ImGui::TextDisabled ("%s -> %s", FTPD_VERSION_LABEL, updater::getRemoteTag ().c_str ());
 			ImGui::Spacing ();
 
 			auto const &style = ImGui::GetStyle ();
-			float const btnWidth = (ImGui::GetContentRegionAvail ().x - style.ItemSpacing.x * 2.0f) / 3.0f;
+			float const availWidth = ImGui::GetContentRegionAvail ().x;
+			float const halfWidth  = (availWidth - style.ItemSpacing.x) * 0.5f;
 
-			if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (btnWidth, ui::px (22.0f))))
+			// Row 1: Actualizar ahora + Mas tarde
+			if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (halfWidth, ui::px (22.0f))))
 			{
 				updater::answerPrompt (true);
-				ImGui::CloseCurrentPopup ();
 			}
 			ImGui::SameLine ();
-			if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (btnWidth, ui::px (22.0f))))
-			{
-				m_showWhatsNew = true;
-			}
-			ImGui::SameLine ();
-			if (ImGui::Button (tr (STR_UPDATES_LATER), ImVec2 (btnWidth, ui::px (22.0f))))
+			if (ImGui::Button (tr (STR_UPDATES_LATER), ImVec2 (halfWidth, ui::px (22.0f))))
 			{
 				updater::answerPrompt (false);
 				ImGui::CloseCurrentPopup ();
+			}
+
+			// Row 2: Novedades centered below
+			ImGui::Spacing ();
+			float const notesWidth = halfWidth;
+			float const offsetX    = (availWidth - notesWidth) * 0.5f;
+			if (offsetX > 0.0f)
+				ImGui::SetCursorPosX (ImGui::GetCursorPosX () + offsetX);
+
+			if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (notesWidth, ui::px (22.0f))))
+			{
+				m_showWhatsNew = true;
 			}
 			break;
 		}

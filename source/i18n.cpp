@@ -103,6 +103,10 @@ char const *const s_strings[static_cast<std::size_t> (Language::Count)][STR_COUN
         [STR_UPDATES_NO_NOTES]      = "No release notes available for this version.",
         [STR_UPDATES_ERROR]         = "Update failed: %s",
         [STR_UPDATES_PROMPT_TITLE]  = "Update Available###UpdatePrompt",
+        [STR_UPDATES_AUTO_ON]       = "Auto-update: Yes",
+        [STR_UPDATES_AUTO_OFF]      = "Auto-update: No",
+        [STR_UPDATES_CHANNEL_STABLE]= "Channel: stable",
+        [STR_UPDATES_CHANNEL_BETA]  = "Channel: +beta",
     },
     // Spanish
     [static_cast<std::size_t> (Language::Spanish)] = {
@@ -198,6 +202,10 @@ char const *const s_strings[static_cast<std::size_t> (Language::Count)][STR_COUN
         [STR_UPDATES_NO_NOTES]      = "No hay notas disponibles para esta versión.",
         [STR_UPDATES_ERROR]         = "Error al actualizar: %s",
         [STR_UPDATES_PROMPT_TITLE]  = "Actualización disponible###UpdatePrompt",
+        [STR_UPDATES_AUTO_ON]       = "Autoactualizar: Sí",
+        [STR_UPDATES_AUTO_OFF]      = "Autoactualizar: No",
+        [STR_UPDATES_CHANNEL_STABLE]= "Canal: estable",
+        [STR_UPDATES_CHANNEL_BETA]  = "Canal: +beta",
     },
 };
 }

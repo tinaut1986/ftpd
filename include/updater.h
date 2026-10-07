@@ -3,6 +3,14 @@
 #include <cstddef>
 #include <string>
 
+#ifndef FTPD_VERSION_LABEL
+#if defined(FTPD_IS_BETA) && FTPD_IS_BETA
+#define FTPD_VERSION_LABEL FTPD_VERSION_STRING " BETA"
+#else
+#define FTPD_VERSION_LABEL FTPD_VERSION_STRING
+#endif
+#endif
+
 namespace updater
 {
 
@@ -34,6 +42,12 @@ void init (char const *argv0_ = nullptr, bool autoCheck_ = true);
 
 /// \brief Trigger an immediate check for updates in the background
 void checkNow ();
+
+/// \brief Trigger an automatic check for updates (raises modal prompt if update found)
+void checkAuto ();
+
+/// \brief Whether the current build is a Beta channel build
+bool isBetaBuild ();
 
 /// \brief Start downloading and installing the available update
 void install ();

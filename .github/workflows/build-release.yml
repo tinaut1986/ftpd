@@ -76,7 +76,7 @@ jobs:
       - name: Build and package (EX + classic)
         run: |
           chmod +x scripts/build-3ds.sh tools/bin/bannertool tools/bin/makerom
-          scripts/build-3ds.sh "${{ needs.meta.outputs.tag }}"
+          scripts/build-3ds.sh "${{ needs.meta.outputs.tag }}" "${{ needs.meta.outputs.channel }}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -102,7 +102,7 @@ jobs:
       - name: Build and package (EX + classic)
         run: |
           chmod +x scripts/build-switch.sh
-          scripts/build-switch.sh "${{ needs.meta.outputs.tag }}"
+          scripts/build-switch.sh "${{ needs.meta.outputs.tag }}" "${{ needs.meta.outputs.channel }}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

@@ -11,6 +11,7 @@ set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 LABEL=${1:-dev}
+CHANNEL=${2:-Release}
 DIST=$ROOT/dist
 export DEVKITPRO=${DEVKITPRO:-/opt/devkitpro}
 export DEVKITARM=${DEVKITARM:-$DEVKITPRO/devkitARM}
@@ -37,8 +38,13 @@ build_variant() {
 	cp "$dir/$target.3dsx" "$DIST/$name-$LABEL.3dsx"
 }
 
-build_variant build-3ds ftpd ftpd-ex "$ROOT/meta/ftpd-cia.rsf" -DFTPD_CLASSIC=OFF
-build_variant build-3ds-classic ftpd-classic ftpd-classic "$ROOT/meta/ftpd-classic-cia.rsf" -DFTPD_CLASSIC=ON
+BETA_FLAG="-DFTPD_BETA=OFF"
+if [ "$CHANNEL" = "Beta" ] || [ "$CHANNEL" = "beta" ]; then
+	BETA_FLAG="-DFTPD_BETA=ON"
+fi
+
+build_variant build-3ds ftpd ftpd-ex "$ROOT/meta/ftpd-cia.rsf" -DFTPD_CLASSIC=OFF "$BETA_FLAG"
+build_variant build-3ds-classic ftpd-classic ftpd-classic "$ROOT/meta/ftpd-classic-cia.rsf" -DFTPD_CLASSIC=ON "$BETA_FLAG"
 
 rm -f "$DIST/ftpd.bnr"
 ls -l "$DIST"

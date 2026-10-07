@@ -11,6 +11,7 @@ set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 LABEL=${1:-dev}
+CHANNEL=${2:-Release}
 DIST=$ROOT/dist
 export DEVKITPRO=${DEVKITPRO:-/opt/devkitpro}
 export DEVKITA64=${DEVKITA64:-$DEVKITPRO/devkitA64}
@@ -28,7 +29,12 @@ build_variant() {
 	cp "$dir/$target.nro" "$DIST/$name-$LABEL.nro"
 }
 
-build_variant build-switch ftpd ftpd-ex -DFTPD_CLASSIC=OFF
-build_variant build-switch-classic ftpd-classic ftpd-classic -DFTPD_CLASSIC=ON
+BETA_FLAG="-DFTPD_BETA=OFF"
+if [ "$CHANNEL" = "Beta" ] || [ "$CHANNEL" = "beta" ]; then
+	BETA_FLAG="-DFTPD_BETA=ON"
+fi
+
+build_variant build-switch ftpd ftpd-ex -DFTPD_CLASSIC=OFF "$BETA_FLAG"
+build_variant build-switch-classic ftpd-classic ftpd-classic -DFTPD_CLASSIC=ON "$BETA_FLAG"
 
 ls -l "$DIST"
