@@ -124,6 +124,12 @@ it by hand whenever upstream is merged in.
 `master` means **stable**. Work that is not ready to be called stable stays on a
 `release/*` branch. Which path applies is the user's call, so **ask**:
 
+### Release Notes (`docs/release-notes/<tag>.md`)
+
+**MANDATORY**: Whenever preparing a release or bumping a tag (`vX.Y.Z-EX`), you **MUST** create a summary of the changes in `docs/release-notes/<tag>.md` (e.g. `docs/release-notes/v1.3.1-EX.md`) **BEFORE** cutting and pushing the tag.
+
+The GitHub Actions release workflow embeds this file inside `<!-- ftpd-notes -->` in the GitHub release body. The in-app updater on the 3DS and Switch reads this exact block and displays it in the **"What's New" / "Novedades"** dialog before the user updates. If this file is omitted, the console app will show no release notes for that version.
+
 **Beta** — tag the unmerged branch; publishes a pre-release.
 
 ```sh
