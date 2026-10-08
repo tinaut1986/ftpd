@@ -40,6 +40,10 @@ enum class Prompt
 /// \param autoCheck_ Whether to trigger a check when network is ready
 void init (char const *argv0_ = nullptr, bool autoCheck_ = true);
 
+/// \brief Abort any job in flight and wait for the worker thread
+/// \note Must be called before tearing down network services
+void exit ();
+
 /// \brief Trigger an immediate check for updates in the background
 void checkNow ();
 

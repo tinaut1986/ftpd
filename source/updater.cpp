@@ -73,6 +73,7 @@ std::atomic<updater::Prompt> s_prompt {updater::Prompt::None};
 std::atomic<int> s_progress {0};
 std::atomic<bool> s_busy {false};
 std::atomic<bool> s_restartRequested {false};
+std::atomic<bool> s_abort {false};
 
 bool s_autoCheck = true;
 bool s_beta      = kIsBetaBuild;
@@ -587,6 +588,9 @@ std::size_t fileWriteCallback (void *contents, std::size_t size, std::size_t nme
 int xferInfoCallback (void *clientp, curl_off_t dltotal, curl_off_t dlnow,
     curl_off_t /*ultotal*/, curl_off_t /*ulnow*/)
 {
+	if (s_abort)
+		return 1;
+
 	auto *ctx = static_cast<FileDownloadCtx *> (clientp);
 	if (dltotal > 0)
 	{
@@ -595,6 +599,12 @@ int xferInfoCallback (void *clientp, curl_off_t dltotal, curl_off_t dlnow,
 		s_progress.store (std::clamp (ctx->baseProgress + pct, 0, 100));
 	}
 	return 0;
+}
+
+int abortCallback (void * /*clientp*/, curl_off_t /*dltotal*/, curl_off_t /*dlnow*/,
+    curl_off_t /*ultotal*/, curl_off_t /*ulnow*/)
+{
+	return s_abort ? 1 : 0;
 }
 
 bool httpGet (std::string const &url, MemoryBuffer &out)
@@ -618,6 +628,8 @@ bool httpGet (std::string const &url, MemoryBuffer &out)
 	curl_easy_setopt (curl, CURLOPT_BUFFERSIZE, static_cast<long> (UPDATER_CHUNK));
 	curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, memWriteCallback);
 	curl_easy_setopt (curl, CURLOPT_WRITEDATA, &out);
+	curl_easy_setopt (curl, CURLOPT_XFERINFOFUNCTION, abortCallback);
+	curl_easy_setopt (curl, CURLOPT_NOPROGRESS, 0L);
 
 	auto const res = curl_easy_perform (curl);
 	long httpCode = 0;
@@ -955,7 +967,7 @@ void workerEntryPoint (bool autoCheck, bool installJob)
 
 void startJob (bool autoCheck, bool installJob)
 {
-	if (s_busy.exchange (true))
+	if (s_abort || s_busy.exchange (true))
 		return;
 
 	if (s_workerThread)
@@ -986,6 +998,18 @@ void init (char const *argv0_, bool autoCheck_)
 	s_autoCheck = autoCheck_;
 	if (s_autoCheck && platform::networkVisible ())
 		checkAuto ();
+}
+
+void exit ()
+{
+	// The worker's stack lives on the heap, which is unmapped when the process
+	// exits; a check still in flight would crash. Abort it and wait for it.
+	s_abort = true;
+	if (s_workerThread)
+	{
+		s_workerThread->join ();
+		s_workerThread.reset ();
+	}
 }
 
 void checkNow ()

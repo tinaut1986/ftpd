@@ -73,6 +73,10 @@ int main (int argc, char *argv[])
 	// clean up resources before exiting switch/3ds services
 	server.reset ();
 
+#ifndef CLASSIC
+	updater::exit ();
+#endif
+
 	platform::exit ();
 
 #ifndef CLASSIC
