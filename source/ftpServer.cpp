@@ -1208,8 +1208,6 @@ void FtpServer::showSettings ()
 	}
 }
 
-extern char const *const g_buildStamp;
-
 void FtpServer::showHelp ()
 {
 #ifdef __3DS__
@@ -1275,16 +1273,27 @@ void FtpServer::showHelp ()
 		if (m_helpSelectedTab < 0 && (tabPrev || tabNext))
 			m_helpSelectedTab = (m_helpCurrentTab + (tabNext ? 1 : HELP_TAB_COUNT - 1)) % HELP_TAB_COUNT;
 
-		// Taller tabs sharing the full width, so they read as tabs and are easy to touch
+		// Taller tabs filling the full width, so they read as tabs and are easy to touch. Each
+		// tab gets its label's width plus an equal share of the rest, so a long label (e.g.
+		// "How to Connect" on the 3DS) is not truncated.
+		char const *const tabLabels[HELP_TAB_COUNT] = {
+		    tr (STR_HELP_TAB_CONTROLS), tr (STR_HELP_TAB_CONNECT), tr (STR_HELP_TAB_ABOUT)};
 		auto const tabPadding = ImVec2 (ImGui::GetStyle ().FramePadding.x, ui::px (6.0f));
-		auto const tabWidth =
-		    (ImGui::GetContentRegionAvail ().x - (HELP_TAB_COUNT - 1) * ImGui::GetStyle ().ItemInnerSpacing.x) /
-		    HELP_TAB_COUNT;
-		auto const beginTab = [&] (char const *const label_, int const index_) {
+		float tabWidths[HELP_TAB_COUNT];
+		float labelsWidth = 0.0f;
+		for (int i = 0; i < HELP_TAB_COUNT; ++i)
+		{
+			tabWidths[i] = ImGui::CalcTextSize (tabLabels[i]).x + 2.0f * tabPadding.x;
+			labelsWidth += tabWidths[i];
+		}
+		auto const tabSpare = std::max (0.0f,
+		    ImGui::GetContentRegionAvail ().x - (HELP_TAB_COUNT - 1) * ImGui::GetStyle ().ItemInnerSpacing.x -
+		        labelsWidth);
+		auto const beginTab = [&] (int const index_) {
 			ImGui::PushStyleVar (ImGuiStyleVar_FramePadding, tabPadding);
-			ImGui::SetNextItemWidth (tabWidth);
+			ImGui::SetNextItemWidth (tabWidths[index_] + tabSpare / HELP_TAB_COUNT);
 			bool const open = ImGui::BeginTabItem (
-			    label_, nullptr, m_helpSelectedTab == index_ ? ImGuiTabItemFlags_SetSelected : 0);
+			    tabLabels[index_], nullptr, m_helpSelectedTab == index_ ? ImGuiTabItemFlags_SetSelected : 0);
 			ImGui::PopStyleVar ();
 			if (open)
 				m_helpCurrentTab = index_;
@@ -1296,7 +1305,7 @@ void FtpServer::showHelp ()
 		ImGui::PopStyleVar ();
 		if (tabBar)
 		{
-			if (beginTab (tr (STR_HELP_TAB_CONTROLS), 0))
+			if (beginTab (0))
 			{
 				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, 0.0f), false);
 				ui::controlRow ({"Y"}, tr (STR_HELP_CTRL_Y));
@@ -1320,7 +1329,7 @@ void FtpServer::showHelp ()
 				ImGui::EndTabItem ();
 			}
 
-			if (beginTab (tr (STR_HELP_TAB_CONNECT), 1))
+			if (beginTab (1))
 			{
 				ImGui::BeginChild ("ConnectScroll", ImVec2 (0.0f, 0.0f), false);
 				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC1));
@@ -1337,7 +1346,7 @@ void FtpServer::showHelp ()
 				ImGui::EndTabItem ();
 			}
 
-			if (beginTab (tr (STR_HELP_TAB_ABOUT), 2))
+			if (beginTab (2))
 			{
 				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, 0.0f), false);
 				// "<title>  ·  <credit>": the credit goes on the same line when it fits
@@ -1352,7 +1361,6 @@ void FtpServer::showHelp ()
 				titleLine (ImGui::GetStyleColorVec4 (ImGuiCol_TextDisabled),
 				    "based on ftpd v" FTPD_UPSTREAM_VERSION,
 				    "·  Michael Theall © 2024");
-				ImGui::TextDisabled ("%s %s", tr (STR_BUILD_LABEL), g_buildStamp);
 				ImGui::Spacing ();
 
 				auto const &aboutStyle = ImGui::GetStyle ();

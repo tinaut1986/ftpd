@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 1.3.4)
+project(ftpd VERSION 1.3.5)
 
 set(FTPD_PATCH "-EX")
 
@@ -88,17 +88,6 @@ target_compile_definitions(${FTPD_TARGET} PRIVATE
 )
 
 target_compile_options(${FTPD_TARGET} PRIVATE -Wall -Wextra -Werror)
-
-# Build time shown in the About tab, regenerated on every build
-set(FTPD_BUILDSTAMP "${CMAKE_CURRENT_BINARY_DIR}/buildstamp.cpp")
-add_custom_target(${FTPD_TARGET}_buildstamp ALL
-	BYPRODUCTS "${FTPD_BUILDSTAMP}"
-	COMMAND ${CMAKE_COMMAND} -DOUT=${FTPD_BUILDSTAMP} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/buildstamp.cmake
-	COMMENT "Updating build stamp"
-	VERBATIM
-)
-add_dependencies(${FTPD_TARGET} ${FTPD_TARGET}_buildstamp)
-target_sources(${FTPD_TARGET} PRIVATE "${FTPD_BUILDSTAMP}")
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT IPO_SUPPORTED)
