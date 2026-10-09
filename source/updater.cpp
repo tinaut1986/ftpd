@@ -12,6 +12,9 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+
+#include <arpa/inet.h>
+#include <netdb.h>
 #endif
 
 #include <sys/stat.h>
@@ -607,6 +610,63 @@ int abortCallback (void * /*clientp*/, curl_off_t /*dltotal*/, curl_off_t /*dlno
 	return s_abort ? 1 : 0;
 }
 
+#if defined(__SWITCH__)
+/// \brief Log why a host name does not resolve: the console's DNS servers and what the
+/// resolver returns for a few names, with and without restricting it to IPv4
+void logResolveDiagnostics (char const *const host)
+{
+	u32 addr = 0, mask = 0, gateway = 0, dns1 = 0, dns2 = 0;
+	auto const rc = nifmGetCurrentIpConfigInfo (&addr, &mask, &gateway, &dns1, &dns2);
+	auto const ip = [] (u32 const v) {
+		in_addr a;
+		a.s_addr = v;
+		return std::string (inet_ntoa (a));
+	};
+	if (R_SUCCEEDED (rc))
+		error ("updater: ip %s gw %s dns %s / %s\n",
+		    ip (addr).c_str (),
+		    ip (gateway).c_str (),
+		    ip (dns1).c_str (),
+		    ip (dns2).c_str ());
+	else
+		error ("updater: nifmGetCurrentIpConfigInfo 0x%x\n", rc);
+
+	for (auto const name : {host, "github.com", "www.google.com"})
+	{
+		for (auto const family : {AF_UNSPEC, AF_INET})
+		{
+			addrinfo hints{};
+			hints.ai_family   = family;
+			hints.ai_socktype = SOCK_STREAM;
+			addrinfo *res     = nullptr;
+			auto const ret    = getaddrinfo (name, "443", &hints, &res);
+			if (ret == 0 && res)
+			{
+				char buf[INET6_ADDRSTRLEN] = "?";
+				if (res->ai_family == AF_INET)
+					inet_ntop (AF_INET,
+					    &reinterpret_cast<sockaddr_in *> (res->ai_addr)->sin_addr,
+					    buf,
+					    sizeof (buf));
+				error ("updater: getaddrinfo(%s, %s) -> %s\n",
+				    name,
+				    family == AF_INET ? "v4" : "any",
+				    buf);
+			}
+			else
+				error ("updater: getaddrinfo(%s, %s) failed %d (%s), errno %d\n",
+				    name,
+				    family == AF_INET ? "v4" : "any",
+				    ret,
+				    gai_strerror (ret),
+				    errno);
+			if (res)
+				freeaddrinfo (res);
+		}
+	}
+}
+#endif
+
 bool httpGet (std::string const &url, MemoryBuffer &out)
 {
 	CURL *curl = curl_easy_init ();
@@ -630,14 +690,40 @@ bool httpGet (std::string const &url, MemoryBuffer &out)
 	curl_easy_setopt (curl, CURLOPT_WRITEDATA, &out);
 	curl_easy_setopt (curl, CURLOPT_XFERINFOFUNCTION, abortCallback);
 	curl_easy_setopt (curl, CURLOPT_NOPROGRESS, 0L);
+	char curlError[CURL_ERROR_SIZE] = "";
+	curl_easy_setopt (curl, CURLOPT_ERRORBUFFER, curlError);
 
-	auto const res = curl_easy_perform (curl);
+	// DNS/connect can fail right after the network comes up; retry a few times
+	auto res = curl_easy_perform (curl);
+	for (int retry = 0; retry < 3 && !s_abort &&
+	                    (res == CURLE_COULDNT_RESOLVE_HOST || res == CURLE_COULDNT_CONNECT);
+	     ++retry)
+	{
+		for (int i = 0; i < 20 && !s_abort; ++i)
+			platform::Thread::sleep (std::chrono::milliseconds (100));
+		out.data.clear ();
+		res = curl_easy_perform (curl);
+	}
+
 	long httpCode = 0;
 	curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &httpCode);
 	curl_easy_cleanup (curl);
 
 	if (res != CURLE_OK)
 	{
+		error ("updater: %s (%d): %s\n", curl_easy_strerror (res), res, curlError);
+#if defined(__SWITCH__)
+		if (res == CURLE_COULDNT_RESOLVE_HOST)
+		{
+			char *host = nullptr;
+			CURLU *const u = curl_url ();
+			if (u && curl_url_set (u, CURLUPART_URL, url.c_str (), 0) == CURLUE_OK)
+				curl_url_get (u, CURLUPART_HOST, &host, 0);
+			logResolveDiagnostics (host ? host : "api.github.com");
+			curl_free (host);
+			curl_url_cleanup (u);
+		}
+#endif
 		fail (curl_easy_strerror (res));
 		return false;
 	}
@@ -906,9 +992,15 @@ void doInstall ()
 			return;
 
 		s_state = updater::State::Installing;
+
+		// romfs keeps the running 3DSX open, which makes it impossible to delete.
+		// Its only asset (the texture atlas) is already loaded, so release it.
+		romfsExit ();
+
 		std::remove (target.c_str ());
 		if (std::rename (temp.c_str (), target.c_str ()) != 0)
 		{
+			std::remove (temp.c_str ());
 			fail ("Failed to replace 3DSX binary");
 			return;
 		}

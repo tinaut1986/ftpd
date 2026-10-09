@@ -350,7 +350,7 @@ void FtpServer::draw ()
 	bool const pressBack     = kDown & KEY_B;
 #else
 	bool const pressSettings = ImGui::IsKeyPressed (ui::KEY_Y, false);
-	bool const pressHelp     = ImGui::IsKeyPressed (ImGuiKey_GamepadFaceUp, false);
+	bool const pressHelp     = ImGui::IsKeyPressed (ui::KEY_X, false);
 	bool const pressBack     = ImGui::IsKeyPressed (ImGuiKey_GamepadFaceRight, false);
 #endif
 	if (pressSettings)
@@ -514,6 +514,8 @@ void FtpServer::draw ()
 			ImGui::TextDisabled ("%s", tr (STR_ENABLE_WIFI_HINT));
 		}
 	}
+	if (platform::appletMode ())
+		ImGui::TextColored (ImVec4 (1.0f, 0.65f, 0.15f, 1.0f), "%s", tr (STR_APPLET_MODE_WARNING));
 	ImGui::Separator ();
 
 	// body between the header and the button bar
@@ -923,6 +925,7 @@ void FtpServer::showMenu ()
 		m_deflateLevelSetting = m_config->deflateLevel ();
 
 		m_checkUpdatesSetting = m_config->checkUpdates ();
+		m_updateBetaSetting   = m_config->updateBeta ();
 
 #ifdef __3DS__
 		m_getMTimeSetting = m_config->getMTime ();
@@ -1023,70 +1026,106 @@ void FtpServer::showSettings ()
 		// Scrollable form area (leaves 28px for bottom action buttons)
 		ImGui::BeginChild ("SettingsForm", ImVec2 (0.0f, -ui::px (28.0f)), false);
 
-		// Language selector
-		int currentLang = static_cast<int> (m_langSetting);
-		char const *languages[] = {
-			i18n::getLanguageName (Language::English),
-			i18n::getLanguageName (Language::Spanish),
+		// Two columns, each cell a label above its field: fits the 3DS bottom screen
+		// and leaves the Switch's wide modal readable.
+		auto const field = [] (char const *const label_) {
+			ImGui::TableNextColumn ();
+			ImGui::AlignTextToFramePadding ();
+			ImGui::TextUnformatted (label_);
+			ImGui::SetNextItemWidth (-FLT_MIN);
 		};
-		if (ImGui::Combo (tr (STR_LANGUAGE), &currentLang, languages, IM_ARRAYSIZE (languages)))
+
+		if (ImGui::BeginTable ("SettingsGrid", 2, ImGuiTableFlags_SizingStretchSame))
 		{
-			m_langSetting = static_cast<Language> (currentLang);
-			i18n::setLanguage (m_langSetting);
+			int currentLang = static_cast<int> (m_langSetting);
+			char const *languages[] = {
+				i18n::getLanguageName (Language::English),
+				i18n::getLanguageName (Language::Spanish),
+			};
+			field (tr (STR_LANGUAGE));
+			if (ImGui::Combo ("##language", &currentLang, languages, IM_ARRAYSIZE (languages)))
+			{
+				m_langSetting = static_cast<Language> (currentLang);
+				i18n::setLanguage (m_langSetting);
+			}
+
+			field (tr (STR_PORT));
+			ImGui::InputScalar ("##port",
+			    ImGuiDataType_U16,
+			    &m_portSetting,
+			    nullptr,
+			    nullptr,
+			    "%u",
+			    ImGuiInputTextFlags_AutoSelectAll);
+
+			field (tr (STR_USER));
+			ImGui::InputText ("##user",
+			    m_userSetting.data (),
+			    m_userSetting.size (),
+			    ImGuiInputTextFlags_AutoSelectAll);
+
+			field (tr (STR_PASS));
+			ImGui::InputText ("##pass",
+			    m_passSetting.data (),
+			    m_passSetting.size (),
+			    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_Password);
+
+			field (tr (STR_HOSTNAME));
+			ImGui::InputText ("##hostname",
+			    m_hostnameSetting.data (),
+			    m_hostnameSetting.size (),
+			    ImGuiInputTextFlags_AutoSelectAll);
+
+			field (tr (STR_DEFLATE_LEVEL));
+			ImGui::SliderInt ("##deflate", &m_deflateLevelSetting, Z_NO_COMPRESSION, Z_BEST_COMPRESSION);
+
+			// Auto-update checkbox next to the channel selector
+			ImGui::TableNextColumn ();
+			ImGui::Spacing ();
+			ImGui::Checkbox (tr (STR_CHECK_UPDATES), &m_checkUpdatesSetting);
+
+			ImGui::TableNextColumn ();
+			ImGui::Spacing ();
+			int channel = m_updateBetaSetting ? 1 : 0;
+			char const *channels[] = {
+				tr (STR_UPDATES_CHANNEL_STABLE),
+				tr (STR_UPDATES_CHANNEL_BETA),
+			};
+			ImGui::SetNextItemWidth (-FLT_MIN);
+			if (ImGui::Combo ("##channel", &channel, channels, IM_ARRAYSIZE (channels)))
+				m_updateBetaSetting = channel == 1;
+
+#ifdef __SWITCH__
+			ImGui::TableNextRow ();
+			ImGui::TableNextColumn ();
+			ImGui::Checkbox (tr (STR_ENABLE_AP), &m_enableAPSetting);
+			ImGui::TableNextRow ();
+
+			field ("SSID");
+			ImGui::InputText ("##ssid",
+			    m_ssidSetting.data (),
+			    m_ssidSetting.size (),
+			    ImGuiInputTextFlags_AutoSelectAll);
+			if (auto const ssidError = platform::validateSSID (m_ssidSetting))
+				ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), "%s", ssidError);
+
+			field ("Passphrase");
+			ImGui::InputText ("##passphrase",
+			    m_passphraseSetting.data (),
+			    m_passphraseSetting.size (),
+			    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_Password);
+			if (auto const passphraseError = platform::validatePassphrase (m_passphraseSetting))
+				ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), "%s", passphraseError);
+#endif
+
+			ImGui::EndTable ();
 		}
-
-		ImGui::InputText (tr (STR_USER),
-		    m_userSetting.data (),
-		    m_userSetting.size (),
-		    ImGuiInputTextFlags_AutoSelectAll);
-
-		ImGui::InputText (tr (STR_PASS),
-		    m_passSetting.data (),
-		    m_passSetting.size (),
-		    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_Password);
-
-		ImGui::InputText (tr (STR_HOSTNAME),
-		    m_hostnameSetting.data (),
-		    m_hostnameSetting.size (),
-		    ImGuiInputTextFlags_AutoSelectAll);
-
-		ImGui::InputScalar (tr (STR_PORT),
-		    ImGuiDataType_U16,
-		    &m_portSetting,
-		    nullptr,
-		    nullptr,
-		    "%u",
-		    ImGuiInputTextFlags_AutoSelectAll);
-
-		ImGui::SliderInt (
-		    tr (STR_DEFLATE_LEVEL), &m_deflateLevelSetting, Z_NO_COMPRESSION, Z_BEST_COMPRESSION);
-
-		ImGui::Checkbox (tr (STR_CHECK_UPDATES), &m_checkUpdatesSetting);
 
 #ifdef __3DS__
 		ImGui::Checkbox (tr (STR_GET_MTIME), &m_getMTimeSetting);
 #endif
 
-#ifdef __SWITCH__
-		ImGui::Checkbox (tr (STR_ENABLE_AP), &m_enableAPSetting);
-
-		ImGui::InputText ("SSID",
-		    m_ssidSetting.data (),
-		    m_ssidSetting.size (),
-		    ImGuiInputTextFlags_AutoSelectAll);
-		auto const ssidError = platform::validateSSID (m_ssidSetting);
-		if (ssidError)
-			ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), ssidError);
-
-		ImGui::InputText ("Passphrase",
-		    m_passphraseSetting.data (),
-		    m_passphraseSetting.size (),
-		    ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_Password);
-		auto const passphraseError = platform::validatePassphrase (m_passphraseSetting);
-		if (passphraseError)
-			ImGui::TextColored (ImVec4 (1.0f, 0.4f, 0.4f, 1.0f), passphraseError);
-#endif
-
+		ui::padScroll ();
 		ImGui::EndChild ();
 
 		// Bottom action buttons: Save and Reset (Cancel is done via [X] or (B))
@@ -1114,6 +1153,8 @@ void FtpServer::showSettings ()
 			m_config->setDeflateLevel (m_deflateLevelSetting);
 			m_config->setCheckUpdates (m_checkUpdatesSetting);
 			updater::setAutoCheck (m_checkUpdatesSetting);
+			m_config->setUpdateBeta (m_updateBetaSetting);
+			updater::setBeta (m_updateBetaSetting);
 
 #ifdef __3DS__
 			m_config->setGetMTime (m_getMTimeSetting);
@@ -1146,6 +1187,7 @@ void FtpServer::showSettings ()
 			m_hostnameSetting     = defaults->hostname ();
 			m_portSetting         = defaults->port ();
 			m_checkUpdatesSetting = defaults->checkUpdates ();
+			m_updateBetaSetting   = defaults->updateBeta ();
 #ifdef __3DS__
 			m_getMTimeSetting = defaults->getMTime ();
 #endif
@@ -1218,9 +1260,41 @@ void FtpServer::showHelp ()
 		ImGui::Separator ();
 		ImGui::Spacing ();
 
-		if (ImGui::BeginTabBar ("HelpTabs"))
+		// L/R switch tabs
+		constexpr int HELP_TAB_COUNT = 3;
+#ifdef __3DS__
+		auto const tabKeys  = hidKeysDown ();
+		bool const tabPrev  = tabKeys & (KEY_L | KEY_ZL);
+		bool const tabNext  = tabKeys & (KEY_R | KEY_ZR);
+#else
+		bool const tabPrev = ImGui::IsKeyPressed (ImGuiKey_GamepadL1, false);
+		bool const tabNext = ImGui::IsKeyPressed (ImGuiKey_GamepadR1, false);
+#endif
+		if (m_helpSelectedTab < 0 && (tabPrev || tabNext))
+			m_helpSelectedTab = (m_helpCurrentTab + (tabNext ? 1 : HELP_TAB_COUNT - 1)) % HELP_TAB_COUNT;
+
+		// Taller tabs sharing the full width, so they read as tabs and are easy to touch
+		auto const tabPadding = ImVec2 (ImGui::GetStyle ().FramePadding.x, ui::px (6.0f));
+		auto const tabWidth =
+		    (ImGui::GetContentRegionAvail ().x - (HELP_TAB_COUNT - 1) * ImGui::GetStyle ().ItemInnerSpacing.x) /
+		    HELP_TAB_COUNT;
+		auto const beginTab = [&] (char const *const label_, int const index_) {
+			ImGui::PushStyleVar (ImGuiStyleVar_FramePadding, tabPadding);
+			ImGui::SetNextItemWidth (tabWidth);
+			bool const open = ImGui::BeginTabItem (
+			    label_, nullptr, m_helpSelectedTab == index_ ? ImGuiTabItemFlags_SetSelected : 0);
+			ImGui::PopStyleVar ();
+			if (open)
+				m_helpCurrentTab = index_;
+			return open;
+		};
+
+		ImGui::PushStyleVar (ImGuiStyleVar_FramePadding, tabPadding);
+		bool const tabBar = ImGui::BeginTabBar ("HelpTabs", ImGuiTabBarFlags_FittingPolicyResizeDown);
+		ImGui::PopStyleVar ();
+		if (tabBar)
 		{
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONTROLS), nullptr, m_helpSelectedTab == 0 ? ImGuiTabItemFlags_SetSelected : 0))
+			if (beginTab (tr (STR_HELP_TAB_CONTROLS), 0))
 			{
 				ImGui::BeginChild ("ControlsScroll", ImVec2 (0.0f, 0.0f), false);
 				ui::controlRow ({"Y"}, tr (STR_HELP_CTRL_Y));
@@ -1239,11 +1313,12 @@ void FtpServer::showHelp ()
 				ui::controlRow ({"START"}, tr (STR_HELP_CTRL_START));
 #endif
 				ui::controlRow ({"TOUCH"}, tr (STR_HELP_CTRL_TOUCH));
+				ui::padScroll ();
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
 
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_CONNECT), nullptr, m_helpSelectedTab == 1 ? ImGuiTabItemFlags_SetSelected : 0))
+			if (beginTab (tr (STR_HELP_TAB_CONNECT), 1))
 			{
 				ImGui::BeginChild ("ConnectScroll", ImVec2 (0.0f, 0.0f), false);
 				ImGui::TextWrapped ("%s", tr (STR_HELP_CONNECT_DESC1));
@@ -1255,28 +1330,39 @@ void FtpServer::showHelp ()
 				bulletWrapped ("%s %s", tr (STR_HOST_LABEL), m_socket ? m_name.c_str () : tr (STR_NO_CONNECTION));
 				bulletWrapped ("%s %u", tr (STR_PORT), m_config->port ());
 				bulletWrapped ("%s %s", tr (STR_USER), m_config->user ().empty () ? "anonymous" : m_config->user ().c_str ());
+				ui::padScroll ();
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
 
-			if (ImGui::BeginTabItem (tr (STR_HELP_TAB_ABOUT), nullptr, m_helpSelectedTab == 2 ? ImGuiTabItemFlags_SetSelected : 0))
+			if (beginTab (tr (STR_HELP_TAB_ABOUT), 2))
 			{
 				ImGui::BeginChild ("AboutScroll", ImVec2 (0.0f, 0.0f), false);
-				ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX " FTPD_VERSION_LABEL);
-				ImGui::TextDisabled ("based on ftpd v" FTPD_UPSTREAM_VERSION);
-				ImGui::Spacing ();
-				ImGui::TextWrapped ("%s", tr (STR_ABOUT_CREDITS));
+				// "<title>  ·  <credit>": the credit goes on the same line when it fits
+				auto const titleLine = [] (ImVec4 const &color_, char const *const title_, char const *const credit_) {
+					ImGui::TextColored (color_, "%s", title_);
+					auto const creditW = ImGui::CalcTextSize (credit_).x + ImGui::GetStyle ().ItemSpacing.x;
+					if (ImGui::GetContentRegionAvail ().x - ImGui::GetItemRectSize ().x >= creditW)
+						ImGui::SameLine ();
+					ImGui::TextDisabled ("%s", credit_);
+				};
+				titleLine (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "ftpd-EX " FTPD_VERSION_LABEL, "·  tinaut1986 © 2026");
+				titleLine (ImGui::GetStyleColorVec4 (ImGuiCol_TextDisabled),
+				    "based on ftpd v" FTPD_UPSTREAM_VERSION,
+				    "·  Michael Theall © 2024");
 				ImGui::Spacing ();
 
-				float const halfWidth = (ImGui::GetContentRegionAvail ().x - ImGui::GetStyle ().ItemSpacing.x) * 0.5f;
+				auto const &aboutStyle = ImGui::GetStyle ();
+				float const halfWidth  = (ImGui::GetContentRegionAvail ().x - aboutStyle.ItemSpacing.x) * 0.5f;
+				float const btnHeight  = ui::px (22.0f);
 
-				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (halfWidth, ui::px (22.0f))))
+				if (ImGui::Button (tr (STR_UPLOAD_LOG), ImVec2 (halfWidth, btnHeight)))
 					uploadLog ();
 				ImGui::SameLine ();
 
 				static bool s_logSavedSuccess = false;
 				static platform::steady_clock::time_point s_logSavedTime;
-				if (ImGui::Button (tr (STR_SAVE_LOG_SD), ImVec2 (halfWidth, ui::px (22.0f))))
+				if (ImGui::Button (tr (STR_SAVE_LOG_SD), ImVec2 (halfWidth, btnHeight)))
 				{
 					s_logSavedSuccess = saveLog ();
 					s_logSavedTime    = platform::steady_clock::now ();
@@ -1289,7 +1375,30 @@ void FtpServer::showHelp ()
 
 				ImGui::Separator ();
 				ImGui::TextColored (ImVec4 (0.40f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_SECTION));
+
+				// Action button on the left, its status on the right
 				auto const updState = updater::getState ();
+				if (updState == updater::State::Available)
+				{
+					if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (halfWidth, btnHeight)))
+						updater::install ();
+				}
+				else if (updState == updater::State::Installed)
+				{
+					if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (halfWidth, btnHeight)))
+						updater::restart ();
+				}
+				else
+				{
+					ImGui::BeginDisabled (updater::isBusy ());
+					if (ImGui::Button (tr (STR_CHECK_FOR_UPDATES_BTN), ImVec2 (halfWidth, btnHeight)))
+						updater::checkNow ();
+					ImGui::EndDisabled ();
+				}
+
+				ImGui::SameLine ();
+				ImGui::BeginGroup ();
+				ImGui::AlignTextToFramePadding ();
 				switch (updState)
 				{
 				case updater::State::Idle:
@@ -1303,74 +1412,43 @@ void FtpServer::showHelp ()
 				{
 					char buf[64];
 					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
-					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", buf);
+					ImGui::PushStyleColor (ImGuiCol_Text, ImVec4 (0.20f, 0.85f, 0.45f, 1.0f));
+					ImGui::TextWrapped ("%s", buf);
+					ImGui::PopStyleColor ();
 					break;
 				}
 				case updater::State::Downloading:
-					ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), tr (STR_UPDATES_DOWNLOADING), updater::getProgress ());
-					ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-1.0f, ui::px (14.0f)));
-					break;
 				case updater::State::Installing:
-					ImGui::TextColored (ImVec4 (0.35f, 0.75f, 1.0f, 1.0f), "%s", tr (STR_UPDATES_INSTALLING));
-					ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-1.0f, ui::px (14.0f)));
+				{
+					char buf[64];
+					if (updState == updater::State::Downloading)
+						std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_DOWNLOADING), updater::getProgress ());
+					else
+						std::snprintf (buf, sizeof (buf), "%s", tr (STR_UPDATES_INSTALLING));
+					ImGui::ProgressBar (updater::getProgress () / 100.0f, ImVec2 (-FLT_MIN, btnHeight), buf);
 					break;
+				}
 				case updater::State::Installed:
-					ImGui::TextColored (ImVec4 (0.20f, 0.85f, 0.45f, 1.0f), "%s", tr (STR_UPDATES_RESTART_PROMPT));
+					ImGui::PushStyleColor (ImGuiCol_Text, ImVec4 (0.20f, 0.85f, 0.45f, 1.0f));
+					ImGui::TextWrapped ("%s", tr (STR_UPDATES_RESTART_PROMPT));
+					ImGui::PopStyleColor ();
 					break;
 				case updater::State::Error:
 				{
 					char buf[96];
 					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_ERROR), updater::getMessage ().c_str ());
-					ImGui::TextColored (ImVec4 (0.95f, 0.35f, 0.35f, 1.0f), "%s", buf);
+					ImGui::PushStyleColor (ImGuiCol_Text, ImVec4 (0.95f, 0.35f, 0.35f, 1.0f));
+					ImGui::TextWrapped ("%s", buf);
+					ImGui::PopStyleColor ();
 					break;
 				}
 				}
-				ImGui::Spacing ();
+				ImGui::EndGroup ();
 
-				// Row 1: Action button + Novedades
-				if (updState == updater::State::Available)
-				{
-					if (ImGui::Button (tr (STR_UPDATES_INSTALL_NOW), ImVec2 (halfWidth, ui::px (22.0f))))
-						updater::install ();
-				}
-				else if (updState == updater::State::Installed)
-				{
-					if (ImGui::Button (tr (STR_UPDATES_RESTART_NOW), ImVec2 (halfWidth, ui::px (22.0f))))
-						updater::restart ();
-				}
-				else
-				{
-					ImGui::BeginDisabled (updater::isBusy ());
-					if (ImGui::Button (tr (STR_CHECK_FOR_UPDATES_BTN), ImVec2 (halfWidth, ui::px (22.0f))))
-						updater::checkNow ();
-					ImGui::EndDisabled ();
-				}
-
-				ImGui::SameLine ();
 				ImGui::BeginDisabled (!updater::hasNotes ());
-				if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (halfWidth, ui::px (22.0f))))
+				if (ImGui::Button (tr (STR_UPDATES_WHATS_NEW), ImVec2 (halfWidth, btnHeight)))
 					m_showWhatsNew = true;
 				ImGui::EndDisabled ();
-				ImGui::Spacing ();
-
-				// Row 2: Autoactualizar + Canal
-				bool autoCheck = m_config->checkUpdates ();
-				if (ImGui::Button (autoCheck ? tr (STR_UPDATES_AUTO_ON) : tr (STR_UPDATES_AUTO_OFF), ImVec2 (halfWidth, ui::px (22.0f))))
-				{
-					autoCheck = !autoCheck;
-					m_config->setCheckUpdates (autoCheck);
-					m_checkUpdatesSetting = autoCheck;
-					updater::setAutoCheck (autoCheck);
-				}
-
-				ImGui::SameLine ();
-				bool beta = m_config->updateBeta ();
-				if (ImGui::Button (beta ? tr (STR_UPDATES_CHANNEL_BETA) : tr (STR_UPDATES_CHANNEL_STABLE), ImVec2 (halfWidth, ui::px (22.0f))))
-				{
-					beta = !beta;
-					m_config->setUpdateBeta (beta);
-					updater::setBeta (beta);
-				}
 				ImGui::Spacing ();
 
 				ImGui::Separator ();
@@ -1455,6 +1533,7 @@ void FtpServer::showHelp ()
 					ImGui::TreePop ();
 				}
 
+				ui::padScroll ();
 				ImGui::EndChild ();
 				ImGui::EndTabItem ();
 			}
@@ -1557,6 +1636,7 @@ void FtpServer::showWhatsNew ()
 				}
 			}
 		}
+		ui::padScroll ();
 		ImGui::EndChild ();
 
 		if (ImGui::Button (tr (STR_UPDATES_CLOSE), ImVec2 (-1.0f, ui::px (22.0f))))

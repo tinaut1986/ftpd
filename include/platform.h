@@ -65,6 +65,10 @@ char const *validateSSID (std::string const &ssid_);
 /// \param passphrase_ Passphrase to check
 /// \returns empty string on success, error message on failure
 char const *validatePassphrase (std::string const &passphrase_);
+
+/// \brief Whether running in applet mode (e.g. launched from the album), which only gets a
+/// fraction of the memory available to a title takeover
+bool appletMode ();
 #endif
 
 /// \brief Whether network is visible

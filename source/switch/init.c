@@ -45,6 +45,22 @@ static SocketInitConfig const s_socketInitConfig = {
     .bsd_service_type = BsdServiceType_User,
 };
 
+/// \brief Smaller socket buffers for applet mode, where the heap is much smaller
+static SocketInitConfig const s_appletSocketInitConfig = {
+    .tcp_tx_buf_size     = 256 * 1024,
+    .tcp_rx_buf_size     = 256 * 1024,
+    .tcp_tx_buf_max_size = 1 * 1024 * 1024,
+    .tcp_rx_buf_max_size = 1 * 1024 * 1024,
+
+    .udp_tx_buf_size = 0x2400,
+    .udp_rx_buf_size = 0xA500,
+
+    .sb_efficiency = 4,
+
+    .num_bsd_sessions = 2,
+    .bsd_service_type = BsdServiceType_User,
+};
+
 /// \brief Number of FS sessions
 u32 __nx_fs_num_sessions = 1;
 
@@ -60,7 +76,10 @@ void userAppInit ()
 	plInitialize (PlServiceType_User);
 	psmInitialize ();
 	nifmInitialize (NifmServiceType_User);
-	socketInitialize (&s_socketInitConfig);
+	// applet mode (e.g. launched from the album) only gets a fraction of the memory
+	AppletType const type = appletGetAppletType ();
+	bool const applet = type != AppletType_Application && type != AppletType_SystemApplication;
+	socketInitialize (applet ? &s_appletSocketInitConfig : &s_socketInitConfig);
 
 #ifndef NDEBUG
 	// s_fd = nxlinkStdioForDebug ();

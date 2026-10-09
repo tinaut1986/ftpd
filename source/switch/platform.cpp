@@ -734,6 +734,12 @@ char const *platform::validatePassphrase (std::string const &passphrase_)
 	return nullptr;
 }
 
+bool platform::appletMode ()
+{
+	auto const type = appletGetAppletType ();
+	return type != AppletType_Application && type != AppletType_SystemApplication;
+}
+
 bool platform::networkVisible ()
 {
 	if (s_activeAP)
@@ -818,13 +824,14 @@ bool platform::loop ()
 
 	padUpdate (&s_padState);
 
-	auto const keys = padGetButtons (&s_padState);
+	auto const keys = padGetButtonsDown (&s_padState);
 
 	// check if the user wants to exit
 	if (keys & HidNpadButton_Plus)
 		return false;
 
-	// check if the user wants to toggle the backlight
+	// check if the user wants to toggle the backlight (on press only: held would toggle it
+	// every frame)
 	if (keys & HidNpadButton_Minus)
 		toggleBacklight ();
 

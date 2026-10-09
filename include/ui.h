@@ -48,6 +48,17 @@ inline float px (float const v_)
 /// switcher (holding it pops up a one-entry list) and menu bar focus.
 inline constexpr ImGuiKey KEY_Y = ImGuiKey_F24;
 
+/// \brief Key the Switch backend sends for the X button.
+///
+/// X is not forwarded as ImGuiKey_GamepadFaceUp: ImGui's navigation treats that key as
+/// "activate", so pressing X on a focused button would press it instead of opening help.
+inline constexpr ImGuiKey KEY_X = ImGuiKey_F23;
+
+/// \brief Scroll the current window with D-pad up/down while it has something to scroll.
+/// Takes the keys from ImGui's navigation meanwhile, so focus does not jump instead.
+/// Call inside the window (e.g. right before EndChild).
+void padScroll ();
+
 /// \brief Draw an inline controller-button badge: a circle with the symbol inside (letters
 /// and symbols of one character), or a rounded pill for longer text such as "SELECT"
 /// \param text_ Symbol to draw

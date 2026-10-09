@@ -84,6 +84,17 @@ void ui::applyTheme (ImGuiStyle &style_)
 	style_.Colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4 (0.45f, 0.65f, 0.90f, 1.00f);
 	style_.Colors[ImGuiCol_Separator]            = ImVec4 (0.20f, 0.25f, 0.34f, 0.50f);
 	style_.Colors[ImGuiCol_ModalWindowDimBg]     = ImVec4 (0.00f, 0.00f, 0.00f, 0.65f);
+
+	// Tabs: dim when unselected, accent fill and overline when selected
+	style_.TabBarBorderSize   = 2.0f * s;
+	style_.TabBarOverlineSize = 2.0f * s;
+	style_.Colors[ImGuiCol_Tab]                       = ImVec4 (0.14f, 0.19f, 0.27f, 1.00f);
+	style_.Colors[ImGuiCol_TabHovered]                = ImVec4 (0.28f, 0.42f, 0.60f, 1.00f);
+	style_.Colors[ImGuiCol_TabSelected]               = ImVec4 (0.22f, 0.44f, 0.72f, 1.00f);
+	style_.Colors[ImGuiCol_TabSelectedOverline]       = ImVec4 (0.45f, 0.75f, 1.00f, 1.00f);
+	style_.Colors[ImGuiCol_TabDimmed]                 = style_.Colors[ImGuiCol_Tab];
+	style_.Colors[ImGuiCol_TabDimmedSelected]         = style_.Colors[ImGuiCol_TabSelected];
+	style_.Colors[ImGuiCol_TabDimmedSelectedOverline] = style_.Colors[ImGuiCol_TabSelectedOverline];
 }
 
 namespace
@@ -416,6 +427,23 @@ void ui::TouchScroller::update (ImGuiIO &io_, bool const touching_, ImVec2 const
 
 	coast (m_target, m_velocityY, false);
 	coast (m_targetX, m_velocityX, true);
+}
+
+void ui::padScroll ()
+{
+	auto *const window = ImGui::GetCurrentWindow ();
+	if (window->ScrollMax.y <= 0.0f)
+		return;
+
+	auto const id = window->ID;
+	ImGui::SetKeyOwner (ImGuiKey_GamepadDpadUp, id);
+	ImGui::SetKeyOwner (ImGuiKey_GamepadDpadDown, id);
+
+	auto const step = px (6.0f);
+	if (ImGui::IsKeyDown (ImGuiKey_GamepadDpadUp, id))
+		ImGui::SetScrollY (window, ImMax (window->Scroll.y - step, 0.0f));
+	if (ImGui::IsKeyDown (ImGuiKey_GamepadDpadDown, id))
+		ImGui::SetScrollY (window, ImMin (window->Scroll.y + step, window->ScrollMax.y));
 }
 
 void ui::badge (char const *const text_)
