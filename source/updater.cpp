@@ -25,6 +25,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -1104,6 +1105,50 @@ void exit ()
 	}
 }
 
+void applyStagedUpdate ()
+{
+#if defined(__3DS__) || defined(__SWITCH__)
+	if (!isHomebrewMode () || s_targetPath.empty ())
+		return;
+
+	auto target = s_targetPath;
+#if defined(__SWITCH__)
+	if (!target.starts_with ("sdmc:") && target.starts_with ("/"))
+		target = "sdmc:" + target;
+#endif
+	auto const staged = target + ".update";
+
+	FILE *const fp = std::fopen (staged.c_str (), "rb");
+	if (!fp)
+		return;
+
+	// Only take a complete binary: an upload may have been cut short by the exit
+	char header[0x20] = {};
+	auto const got = std::fread (header, 1, sizeof (header), fp);
+	std::fseek (fp, 0, SEEK_END);
+	auto const size = std::ftell (fp);
+	std::fclose (fp);
+
+#if defined(__SWITCH__)
+	std::uint32_t nroSize = 0;
+	std::memcpy (&nroSize, header + 0x18, sizeof (nroSize));
+	bool const valid = got == sizeof (header) && std::memcmp (header + 0x10, "NRO0", 4) == 0 &&
+	                   size >= static_cast<long> (nroSize);
+
+	// the loader keeps the NRO open through romfs
+	romfsExit ();
+#else
+	bool const valid =
+	    got == sizeof (header) && std::memcmp (header, "3DSX", 4) == 0 && size > 0x20;
+#endif
+	if (!valid)
+		return;
+
+	std::remove (target.c_str ());
+	std::rename (staged.c_str (), target.c_str ());
+#endif
+}
+
 void checkNow ()
 {
 	startJob (false, false);
@@ -1191,6 +1236,14 @@ std::string getRemoteTag ()
 {
 	auto const lock = std::scoped_lock (s_mutex);
 	return s_remoteTag;
+}
+
+std::string getRemoteLabel ()
+{
+	auto tag = getRemoteTag ();
+	if (auto const pos = tag.find ("-EX"); pos != std::string::npos)
+		tag.erase (pos, 3);
+	return tag;
 }
 
 std::string getMessage ()

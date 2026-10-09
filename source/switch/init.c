@@ -30,9 +30,15 @@ static int s_fd = -1;
 #endif
 
 /// \brief Socket initialization configuration
+///
+/// The default buffer sizes are taken from the socket pool for every socket, including
+/// command and PASV listening sockets. Clients such as KDE's KIO open one data connection
+/// per file when refreshing a folder, and with 1 MiB defaults a few dozen of them (plus
+/// the ones still closing) exhausted the pool: socket() failed with ENOBUFS until they
+/// expired. Data sockets set their own size (FtpSession::SOCK_BUFFERSIZE) anyway.
 static SocketInitConfig const s_socketInitConfig = {
-    .tcp_tx_buf_size     = 1 * 1024 * 1024,
-    .tcp_rx_buf_size     = 1 * 1024 * 1024,
+    .tcp_tx_buf_size     = 128 * 1024,
+    .tcp_rx_buf_size     = 128 * 1024,
     .tcp_tx_buf_max_size = 4 * 1024 * 1024,
     .tcp_rx_buf_max_size = 4 * 1024 * 1024,
 
@@ -45,17 +51,21 @@ static SocketInitConfig const s_socketInitConfig = {
     .bsd_service_type = BsdServiceType_User,
 };
 
-/// \brief Smaller socket buffers for applet mode, where the heap is much smaller
+/// \brief Smaller socket pool for applet mode, where the heap is much smaller.
+///
+/// The pool is sb_efficiency * (tx max + rx max + udp), ~16 MiB here (64 MiB in full
+/// mode). A burst of per-file listings needs ~128 KiB per data socket (they are set to
+/// FtpSession::SOCK_BUFFERSIZE), so a 4x / ~8 MiB pool ran out after ~60 of them.
 static SocketInitConfig const s_appletSocketInitConfig = {
-    .tcp_tx_buf_size     = 256 * 1024,
-    .tcp_rx_buf_size     = 256 * 1024,
+    .tcp_tx_buf_size     = 32 * 1024,
+    .tcp_rx_buf_size     = 32 * 1024,
     .tcp_tx_buf_max_size = 1 * 1024 * 1024,
     .tcp_rx_buf_max_size = 1 * 1024 * 1024,
 
     .udp_tx_buf_size = 0x2400,
     .udp_rx_buf_size = 0xA500,
 
-    .sb_efficiency = 4,
+    .sb_efficiency = 8,
 
     .num_bsd_sessions = 2,
     .bsd_service_type = BsdServiceType_User,

@@ -443,7 +443,7 @@ bool FtpSession::transferring ()
 	// Only real file transfers count (not directory listings), and the card is held
 	// briefly after finishing so short transfers don't flicker on and off
 	auto const now = platform::steady_clock::now ();
-	if (m_fileSize > 0 || m_filePosition > 0)
+	if (m_fileXfer && (m_fileSize > 0 || m_filePosition > 0))
 	{
 		m_lastTransferTime = now;
 		m_hasTransferred   = true;
@@ -459,11 +459,12 @@ static void drawTransferProgressBarWithGraph (
     float const *deltas,
     std::size_t deltaCount,
     char const *overlayText,
-    float height = 22.0f) // 3DS pixels; scaled below
+    float height = 22.0f, // 3DS pixels; scaled below
+    float width  = 0.0f)  // 0: all the available width
 {
 	auto const &style  = ImGui::GetStyle ();
 	auto const pos     = ImGui::GetCursorScreenPos ();
-	float const availW = ImGui::GetContentRegionAvail ().x;
+	float const availW = width > 0.0f ? width : ImGui::GetContentRegionAvail ().x;
 	ImVec2 const size (availW, ui::px (height));
 
 	// Reserve layout space in the window
@@ -558,6 +559,77 @@ static void drawTransferProgressBarWithGraph (
 }
 #endif
 
+#ifndef CLASSIC
+namespace
+{
+enum class CardIcon
+{
+	Pause,
+	Play,
+	Cancel
+};
+
+/// \brief Square icon button for the transfer card. Icons are drawn as shapes: the 3DS
+/// system font has no media symbols.
+bool cardButton (char const *const id_, CardIcon const icon_, float const size_)
+{
+	bool const cancel = icon_ == CardIcon::Cancel;
+	if (cancel)
+	{
+		ImGui::PushStyleColor (ImGuiCol_Button, ImVec4 (0.60f, 0.18f, 0.18f, 0.85f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonHovered, ImVec4 (0.80f, 0.25f, 0.25f, 1.00f));
+		ImGui::PushStyleColor (ImGuiCol_ButtonActive, ImVec4 (0.90f, 0.32f, 0.32f, 1.00f));
+	}
+	bool const pressed = ImGui::Button (id_, ImVec2 (size_, size_));
+	if (cancel)
+		ImGui::PopStyleColor (3);
+
+	auto const min = ImGui::GetItemRectMin ();
+	auto const max = ImGui::GetItemRectMax ();
+	auto const c   = ImVec2 ((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+	auto const r   = size_ * 0.25f;
+	auto const col = ImGui::GetColorU32 (ImGuiCol_Text);
+	auto *const dl = ImGui::GetWindowDrawList ();
+
+	switch (icon_)
+	{
+	case CardIcon::Pause:
+	{
+		auto const w = r * 0.6f;
+		dl->AddRectFilled (ImVec2 (c.x - r, c.y - r), ImVec2 (c.x - r + w, c.y + r), col);
+		dl->AddRectFilled (ImVec2 (c.x + r - w, c.y - r), ImVec2 (c.x + r, c.y + r), col);
+		break;
+	}
+	case CardIcon::Play:
+		dl->AddTriangleFilled (ImVec2 (c.x - r * 0.8f, c.y - r),
+		    ImVec2 (c.x - r * 0.8f, c.y + r),
+		    ImVec2 (c.x + r, c.y),
+		    col);
+		break;
+	case CardIcon::Cancel:
+	{
+		auto const t = std::max (1.5f, size_ * 0.09f);
+		dl->AddLine (ImVec2 (c.x - r, c.y - r), ImVec2 (c.x + r, c.y + r), col, t);
+		dl->AddLine (ImVec2 (c.x - r, c.y + r), ImVec2 (c.x + r, c.y - r), col, t);
+		break;
+	}
+	}
+
+	return pressed;
+}
+}
+#endif
+
+void FtpSession::togglePause ()
+{
+	m_paused = !m_paused;
+}
+
+void FtpSession::cancelTransfer ()
+{
+	m_cancelRequested = true;
+}
+
 void FtpSession::draw ()
 {
 #ifndef __NDS__
@@ -580,7 +652,7 @@ void FtpSession::draw ()
 	else
 		ImGui::TextUnformatted (m_cwd.empty () ? "/" : m_cwd.c_str ());
 
-	if (m_fileSize || m_filePosition)
+	if (m_fileXfer && (m_fileSize || m_filePosition))
 	{
 		// MiB/s plot lines & rate estimation
 		for (std::size_t i = 0; i < POSITION_HISTORY - 1; ++i)
@@ -611,7 +683,21 @@ void FtpSession::draw ()
 		}
 
 		auto const rateString = fs::printSize (m_xferRate) + "/s";
-		char const *modeLabel = (m_xferMode == XferFileMode::RETR) ? tr (STR_DOWNLOADING) : tr (STR_UPLOADING);
+		char const *modeLabel = m_paused ? tr (STR_PAUSED) :
+		                        (m_xferMode == XferFileMode::RETR) ? tr (STR_DOWNLOADING) : tr (STR_UPLOADING);
+
+		// pause/resume and cancel buttons to the right of the progress bar
+		auto const btnSize  = ui::px (22.0f);
+		auto const btnGap   = ImGui::GetStyle ().ItemSpacing.x;
+		auto const barWidth = ImGui::GetContentRegionAvail ().x - 2.0f * (btnSize + btnGap);
+		auto const drawButtons = [&] () {
+			ImGui::SameLine (0.0f, btnGap);
+			if (cardButton ("##pause", m_paused ? CardIcon::Play : CardIcon::Pause, btnSize))
+				togglePause ();
+			ImGui::SameLine (0.0f, btnGap);
+			if (cardButton ("##cancel", CardIcon::Cancel, btnSize))
+				cancelTransfer ();
+		};
 
 		if (m_fileSize > 0)
 		{
@@ -620,7 +706,7 @@ void FtpSession::draw ()
 
 			// ETA calculation
 			char etaBuf[32] = "ETA: --:--";
-			if (m_xferRate > 512.0f && m_fileSize > m_filePosition)
+			if (!m_paused && m_xferRate > 512.0f && m_fileSize > m_filePosition)
 			{
 				auto const remainingBytes   = m_fileSize - m_filePosition;
 				auto const remainingSeconds = static_cast<unsigned int> (remainingBytes / m_xferRate);
@@ -646,7 +732,9 @@ void FtpSession::draw ()
 			    m_filePositionDeltas,
 			    POSITION_HISTORY,
 			    progressOverlay,
-			    22.0f);
+			    22.0f,
+			    barWidth);
+			drawButtons ();
 
 			ImGui::TextColored (ImVec4 (0.35f, 0.85f, 1.0f, 1.0f), "%s", rateString.c_str ());
 			ImGui::SameLine ();
@@ -671,7 +759,9 @@ void FtpSession::draw ()
 			    m_filePositionDeltas,
 			    POSITION_HISTORY,
 			    progressOverlay,
-			    22.0f);
+			    22.0f,
+			    barWidth);
+			drawButtons ();
 
 			ImGui::TextColored (ImVec4 (0.35f, 0.85f, 1.0f, 1.0f), "%s", rateString.c_str ());
 			ImGui::SameLine ();
@@ -827,6 +917,20 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 	pollInfo.clear ();
 	for (auto &session : sessions_)
 	{
+		// requests from the UI
+		if (session->m_cancelRequested.exchange (false) && session->m_state != State::COMMAND &&
+		    session->m_fileXfer)
+		{
+			info ("Transfer cancelled\n");
+			session->sendResponse ("426 Transfer cancelled\r\n");
+			session->setState (State::COMMAND, true, true);
+		}
+
+		// keep a paused session from hitting the idle timeout
+		bool const paused = session->m_paused && session->m_state == State::DATA_TRANSFER;
+		if (paused)
+			session->m_timestamp = std::time (nullptr);
+
 		if (session->m_commandSocket)
 		{
 			pollInfo.emplace_back (*session->m_commandSocket, POLLIN | POLLPRI, 0);
@@ -855,6 +959,10 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 			break;
 
 		case State::DATA_TRANSFER:
+			// paused: leave the data socket alone, TCP flow control stalls the peer
+			if (paused)
+				break;
+
 			// we need to transfer data
 			if (session->m_recv)
 			{
@@ -1005,6 +1113,9 @@ void FtpSession::setState (State const state_, bool const closePasv_, bool const
 			m_restartPosition = 0;
 			m_fileSize        = 0;
 			m_filePosition    = 0;
+			m_fileXfer        = false;
+			m_paused          = false;
+			m_cancelRequested = false;
 
 			for (auto &pos : m_filePositionHistory)
 				pos = 0;
@@ -1535,6 +1646,7 @@ int FtpSession::fillDirent (std::string const &path_, char const *type_)
 
 void FtpSession::xferFile (char const *const args_, XferFileMode const mode_)
 {
+	LOCKED (m_fileXfer = true);
 	m_xferMode = mode_;
 	m_zFlushed = false;
 	m_eof      = false;

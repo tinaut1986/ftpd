@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(ftpd VERSION 1.3.3)
+project(ftpd VERSION 1.3.4)
 
 set(FTPD_PATCH "-EX")
 
@@ -78,9 +78,9 @@ endif()
 target_compile_features(${FTPD_TARGET} PRIVATE cxx_std_20)
 target_include_directories(${FTPD_TARGET} PRIVATE include)
 target_compile_definitions(${FTPD_TARGET} PRIVATE
-	STATUS_STRING="ftpd-EX v${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+	STATUS_STRING="ftpd-EX v${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 	FTPD_VERSION_STRING="v${PROJECT_VERSION}${FTPD_PATCH}"
-	FTPD_VERSION_LABEL="v${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+	FTPD_VERSION_LABEL="v${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 	FTPD_IS_BETA=${FTPD_IS_BETA_FLAG}
 	FTPD_UPSTREAM_VERSION="${FTPD_UPSTREAM_VERSION}"
 	IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1
@@ -88,6 +88,17 @@ target_compile_definitions(${FTPD_TARGET} PRIVATE
 )
 
 target_compile_options(${FTPD_TARGET} PRIVATE -Wall -Wextra -Werror)
+
+# Build time shown in the About tab, regenerated on every build
+set(FTPD_BUILDSTAMP "${CMAKE_CURRENT_BINARY_DIR}/buildstamp.cpp")
+add_custom_target(${FTPD_TARGET}_buildstamp ALL
+	BYPRODUCTS "${FTPD_BUILDSTAMP}"
+	COMMAND ${CMAKE_COMMAND} -DOUT=${FTPD_BUILDSTAMP} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/buildstamp.cmake
+	COMMENT "Updating build stamp"
+	VERBATIM
+)
+add_dependencies(${FTPD_TARGET} ${FTPD_TARGET}_buildstamp)
+target_sources(${FTPD_TARGET} PRIVATE "${FTPD_BUILDSTAMP}")
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT IPO_SUPPORTED)
@@ -186,8 +197,8 @@ if(NINTENDO_SWITCH)
 	if(FTPD_CLASSIC)
 		nx_generate_nacp(${FTPD_TARGET}.nacp
 			NAME "${PROJECT_NAME} classic"
-			AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH"
-			VERSION "${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+			AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH, tinaut1986"
+			VERSION "${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 		)
 
 		nx_create_nro(${FTPD_TARGET}
@@ -281,8 +292,8 @@ if(NINTENDO_SWITCH)
 
 	nx_generate_nacp(${FTPD_TARGET}.nacp
 		NAME "${PROJECT_NAME} 11th Anniversary Edition"
-		AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH"
-		VERSION "${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+		AUTHOR "(c) 2025 Michael Theall, Dave Murphy, TuxSH, tinaut1986"
+		VERSION "${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 	)
 
 	nx_create_nro(${FTPD_TARGET}
@@ -298,7 +309,7 @@ elseif(NINTENDO_3DS)
 	if(FTPD_CLASSIC)
 		ctr_generate_smdh(${FTPD_TARGET}.smdh
 			NAME "ftpd-EX classic"
-			DESCRIPTION "v${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+			DESCRIPTION "v${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 			AUTHOR "tinaut1986 / Michael Theall"
 			ICON meta/icon.png
 		)
@@ -368,7 +379,7 @@ elseif(NINTENDO_3DS)
 
 	ctr_generate_smdh(${FTPD_TARGET}.smdh
 		NAME "ftpd-EX"
-		DESCRIPTION "v${PROJECT_VERSION}${FTPD_PATCH}${FTPD_BETA_SUFFIX}"
+		DESCRIPTION "v${PROJECT_VERSION}${FTPD_BETA_SUFFIX}"
 		AUTHOR "tinaut1986 / Michael Theall"
 		ICON meta/icon.png
 	)

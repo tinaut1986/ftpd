@@ -1208,6 +1208,8 @@ void FtpServer::showSettings ()
 	}
 }
 
+extern char const *const g_buildStamp;
+
 void FtpServer::showHelp ()
 {
 #ifdef __3DS__
@@ -1350,6 +1352,7 @@ void FtpServer::showHelp ()
 				titleLine (ImGui::GetStyleColorVec4 (ImGuiCol_TextDisabled),
 				    "based on ftpd v" FTPD_UPSTREAM_VERSION,
 				    "·  Michael Theall © 2024");
+				ImGui::TextDisabled ("%s %s", tr (STR_BUILD_LABEL), g_buildStamp);
 				ImGui::Spacing ();
 
 				auto const &aboutStyle = ImGui::GetStyle ();
@@ -1411,7 +1414,7 @@ void FtpServer::showHelp ()
 				case updater::State::Available:
 				{
 					char buf[64];
-					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
+					std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteLabel ().c_str ());
 					ImGui::PushStyleColor (ImGuiCol_Text, ImVec4 (0.20f, 0.85f, 0.45f, 1.0f));
 					ImGui::TextWrapped ("%s", buf);
 					ImGui::PopStyleColor ();
@@ -1696,9 +1699,9 @@ void FtpServer::showUpdaterPrompt ()
 			ImGui::Spacing ();
 
 			char buf[64];
-			std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteTag ().c_str ());
+			std::snprintf (buf, sizeof (buf), tr (STR_UPDATES_AVAILABLE), updater::getRemoteLabel ().c_str ());
 			ImGui::TextWrapped ("%s", buf);
-			ImGui::TextDisabled ("%s -> %s", FTPD_VERSION_LABEL, updater::getRemoteTag ().c_str ());
+			ImGui::TextDisabled ("%s -> %s", FTPD_VERSION_LABEL, updater::getRemoteLabel ().c_str ());
 			ImGui::Spacing ();
 
 			auto const &style = ImGui::GetStyle ();

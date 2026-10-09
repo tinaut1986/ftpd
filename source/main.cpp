@@ -82,5 +82,6 @@ int main (int argc, char *argv[])
 #ifndef CLASSIC
 	ImGui::DestroyContext ();
 	curl_global_cleanup ();
+	updater::applyStagedUpdate ();
 #endif
 }
