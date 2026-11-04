@@ -53,17 +53,42 @@ constexpr auto MAX_LOGS = 250;
 constexpr auto MAX_LOGS = 10000;
 #endif
 
+/// \brief Resolve a log path to one that does not depend on the process's current directory
+/// \param path_ Log path
+/// \note On the 3DS/Switch a path starting with '/' is resolved through the cwd's device, and the
+///       cwd is process-wide (the session threads chdir). Pin it to the SD card instead.
+std::string resolveLogPath (std::string_view const path_)
+{
+#if defined(__3DS__) || defined(__SWITCH__)
+	if (path_.starts_with ('/'))
+		return "sdmc:" + std::string (path_);
+#endif
+	return std::string (path_);
+}
+
 bool mkdirParent (std::string_view const path_)
 {
-	auto pos = path_.find_first_of ('/');
-	while (pos != std::string::npos)
+	// skip the device part ("sdmc:"), which cannot be created
+	std::size_t start = 0;
+	if (auto const colon = path_.find (':'); colon != std::string_view::npos
+	                                         && colon < path_.find_first_of ('/'))
+		start = colon + 1;
+
+	auto pos = path_.find_first_of ('/', start);
+	while (pos != std::string_view::npos)
 	{
 		auto const dir = std::string (path_.substr (0, pos));
-		if (!dir.empty ())
+		// nothing before the slash (root), or only the device
+		if (pos > start)
 		{
 			struct stat st {};
 			if (::stat (dir.c_str (), &st) != 0)
 			{
+				// libctru's mkdir indexes the device table with FindDevice's result without
+				// checking it, so a path whose device is not found (stat: ENODEV) crashes it
+				if (errno != ENOENT)
+					return false;
+
 				if (::mkdir (dir.c_str (), 0777) != 0 && errno != EEXIST)
 					return false;
 			}
@@ -75,10 +100,11 @@ bool mkdirParent (std::string_view const path_)
 
 void appendErrorToLogFile (std::string_view const msg_)
 {
-	if (!mkdirParent (FTPDLOG))
+	auto const path = resolveLogPath (FTPDLOG);
+	if (!mkdirParent (path))
 		return;
 
-	FILE *const fp = std::fopen (FTPDLOG, "a");
+	FILE *const fp = std::fopen (path.c_str (), "a");
 	if (!fp)
 		return;
 
@@ -238,12 +264,12 @@ std::string getLog ()
 
 bool saveLog (char const *const path_)
 {
-	char const *const logPath = (path_ && *path_) ? path_ : FTPDLOG;
+	auto const logPath = resolveLogPath ((path_ && *path_) ? path_ : FTPDLOG);
 
 	if (!mkdirParent (logPath))
 		return false;
 
-	FILE *const fp = std::fopen (logPath, "w");
+	FILE *const fp = std::fopen (logPath.c_str (), "w");
 	if (!fp)
 		return false;
 
