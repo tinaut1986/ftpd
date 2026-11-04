@@ -176,6 +176,8 @@ private:
 
 	/// \brief Selected tab for help window (-1 = default/current, 2 = About)
 	int m_helpSelectedTab = -1;
+	/// \brief Help tab shown last frame (for L/R switching)
+	int m_helpCurrentTab = 0;
 
 #ifdef __SWITCH__
 	/// \brief Whether to show access point menu
@@ -214,6 +216,8 @@ private:
 
 	/// \brief Check updates setting
 	bool m_checkUpdatesSetting = true;
+	/// \brief Update channel setting (true = include betas)
+	bool m_updateBetaSetting = false;
 
 #ifdef __3DS__
 	/// \brief getMTime setting

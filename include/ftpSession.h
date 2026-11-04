@@ -40,6 +40,7 @@
 #include <sys/stat.h>
 using stat_t = struct stat;
 
+#include <atomic>
 #include <chrono>
 #include <ctime>
 #include <memory>
@@ -62,6 +63,12 @@ public:
 
 	/// \brief Whether session is currently transferring data
 	bool transferring ();
+
+	/// \brief Pause or resume the current file transfer (applied by the session thread)
+	void togglePause ();
+
+	/// \brief Ask the session thread to abort the current file transfer
+	void cancelTransfer ();
 
 	/// \brief Draw session status
 	void draw ();
@@ -337,6 +344,15 @@ private:
 
 	/// \brief Whether a file transfer was ever observed
 	bool m_hasTransferred = false;
+
+	/// \brief Whether the current transfer is a file (RETR/STOR/APPE), not a listing
+	bool m_fileXfer = false;
+
+	/// \brief Transfer paused from the UI: the data socket is not polled meanwhile
+	std::atomic<bool> m_paused{false};
+
+	/// \brief Transfer cancel requested from the UI
+	std::atomic<bool> m_cancelRequested{false};
 
 	/// \brief Transfer rate (EWMA low-pass filtered)
 	float m_xferRate;

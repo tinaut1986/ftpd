@@ -108,8 +108,8 @@ the user to verify on hardware. Say so instead of claiming they work.
 Releases are built by `.github/workflows/build-release.yml` for tags matching
 `v*-EX*` (e.g. `v1.0.0-EX`; plain `vX.Y.Z` tags belong to upstream). It builds the
 3DS (devkitARM) and Switch (devkitA64) variants in separate jobs, then publishes, per tag:
-`ftpd-ex-<tag>.{cia,3dsx,nro}`, `ftpd-classic-<tag>.{cia,3dsx,nro}` (the `.nro` from the
-Switch job), a QR code per CIA and an auto changelog.
+`ftpd-ex.{cia,3dsx,nro}`, `ftpd-classic.{cia,3dsx,nro}` (the `.nro` from the
+Switch job; no version in the file names, so manual downloads replace the old copy), a QR code per CIA and an auto changelog.
 `.github/workflows/ci.yml` only builds (both consoles) on pushes to `master`/`release/*`
 and PRs. The devkitARM/devkitA64 images are pinned; bump them deliberately.
 

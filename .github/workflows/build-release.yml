@@ -140,8 +140,15 @@ jobs:
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
           RANGE="${PREV:+${PREV}..}HEAD"
 
-          qrencode -s 10 -o "dist/QR-ftpd-ex-${TAG}.png" "${BASE}/ftpd-ex-${TAG}.cia"
-          qrencode -s 10 -o "dist/QR-ftpd-classic-${TAG}.png" "${BASE}/ftpd-classic-${TAG}.cia"
+          # Publish without the version in the file names, so a manual download
+          # replaces the previous copy instead of piling up next to it. The
+          # updater matches "ftpd-ex" + extension, so these names stay compatible.
+          for f in dist/*-"${TAG}".*; do
+            mv "$f" "${f/-${TAG}./.}"
+          done
+
+          qrencode -s 10 -o "dist/QR-ftpd-ex.png" "${BASE}/ftpd-ex.cia"
+          qrencode -s 10 -o "dist/QR-ftpd-classic.png" "${BASE}/ftpd-classic.cia"
 
           {
             if [ "$PRERELEASE" = "true" ]; then
@@ -163,22 +170,22 @@ jobs:
             echo
             echo "### ftpd-EX"
             echo
-            echo "![QR code for ftpd-ex ${TAG}](${BASE}/QR-ftpd-ex-${TAG}.png)"
+            echo "![QR code for ftpd-ex ${TAG}](${BASE}/QR-ftpd-ex.png)"
             echo
-            echo "- [ftpd-ex-${TAG}.cia](${BASE}/ftpd-ex-${TAG}.cia)"
-            echo "- [ftpd-ex-${TAG}.3dsx](${BASE}/ftpd-ex-${TAG}.3dsx)"
+            echo "- [ftpd-ex.cia](${BASE}/ftpd-ex.cia)"
+            echo "- [ftpd-ex.3dsx](${BASE}/ftpd-ex.3dsx)"
             echo
             echo "### ftpd-EX classic (text UI)"
             echo
-            echo "![QR code for ftpd-classic ${TAG}](${BASE}/QR-ftpd-classic-${TAG}.png)"
+            echo "![QR code for ftpd-classic ${TAG}](${BASE}/QR-ftpd-classic.png)"
             echo
-            echo "- [ftpd-classic-${TAG}.cia](${BASE}/ftpd-classic-${TAG}.cia)"
-            echo "- [ftpd-classic-${TAG}.3dsx](${BASE}/ftpd-classic-${TAG}.3dsx)"
+            echo "- [ftpd-classic.cia](${BASE}/ftpd-classic.cia)"
+            echo "- [ftpd-classic.3dsx](${BASE}/ftpd-classic.3dsx)"
             echo
             echo "## Nintendo Switch"
             echo
-            echo "- [ftpd-ex-${TAG}.nro](${BASE}/ftpd-ex-${TAG}.nro)"
-            echo "- [ftpd-classic-${TAG}.nro](${BASE}/ftpd-classic-${TAG}.nro) (text UI)"
+            echo "- [ftpd-ex.nro](${BASE}/ftpd-ex.nro)"
+            echo "- [ftpd-classic.nro](${BASE}/ftpd-classic.nro) (text UI)"
             echo
             echo "Copy the \`.nro\` to \`/switch/\` on the SD card and launch it from the homebrew menu."
             echo

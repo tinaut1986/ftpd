@@ -1433,6 +1433,14 @@ void updateTouch (HidTouchScreenState const &touchState_, ImGuiIO &io_)
 
 	// clicks and drag-scrolling
 	auto const mapped = s_scroller.map (touching, pos);
+
+	// Queue the position before the press, so ImGui's event trickling moves the cursor one
+	// frame before clicking. Items that allow overlap (tabs) only accept a click when they
+	// were already hovered the previous frame; otherwise the first tap is lost. ImGui only delays
+	// the press for touch-screen sources, as on the 3DS.
+	io_.AddMouseSourceEvent (ImGuiMouseSource_TouchScreen);
+	if (touching)
+		io_.AddMousePosEvent (mapped.x, mapped.y);
 	s_scroller.update (io_, touching, pos);
 
 	if (!touching)
@@ -1452,7 +1460,7 @@ void updateGamepads (PadState const &padState_, ImGuiIO &io_)
 	    // clang-format off
 	    std::make_pair (HidNpadButton_A,     ImGuiKey_GamepadFaceDown),  // A and B are swapped
 	    std::make_pair (HidNpadButton_B,     ImGuiKey_GamepadFaceRight), // this is more intuitive
-	    std::make_pair (HidNpadButton_X,     ImGuiKey_GamepadFaceUp),
+	    std::make_pair (HidNpadButton_X,     ui::KEY_X), // see ui.h
 	    std::make_pair (HidNpadButton_Y,     ui::KEY_Y), // see ui.h
 	    std::make_pair (HidNpadButton_L,     ImGuiKey_GamepadL1),
 	    std::make_pair (HidNpadButton_R,     ImGuiKey_GamepadR1),

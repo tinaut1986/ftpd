@@ -44,6 +44,10 @@ void init (char const *argv0_ = nullptr, bool autoCheck_ = true);
 /// \note Must be called before tearing down network services
 void exit ();
 
+/// \brief Replace the running 3DSX/NRO with "<path>.update" if one was staged next to it
+/// (e.g. uploaded over FTP for testing). Call at the very end, once romfs is closed.
+void applyStagedUpdate ();
+
 /// \brief Trigger an immediate check for updates in the background
 void checkNow ();
 
@@ -77,6 +81,9 @@ int getProgress ();
 
 /// \brief Get remote release tag (e.g. "v1.2.2-EX")
 std::string getRemoteTag ();
+
+/// \brief Remote version for display: the tag without the "-EX" suffix (e.g. "v1.2.2")
+std::string getRemoteLabel ();
 
 /// \brief Get status or error message
 std::string getMessage ();
